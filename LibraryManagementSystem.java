@@ -1,24 +1,12 @@
+import java.util.ArrayList;
 import java.util.Scanner;
 
 public class LibraryManagementSystem {
 
-    static int[] bookIds = new int[5];
-    static String[] bookTitles = new String[5];
-    static String[] authors = new String[5];
-    static boolean[] available = new boolean[5];
-    static int[] issuedToMember = new int[5];
-    static int[] borrowedDays = new int[5];
+    private static final ArrayList<Book> books = new ArrayList<>();
+    private static final ArrayList<Member> members = new ArrayList<>();
+    private static final ArrayList<Transaction> transactions = new ArrayList<>();
 
-    static int[] memberIds = new int[5];
-    static String[] memberNames = new String[5];
-    static String[] memberPhones = new String[5];
-
-    static int[] transactionBookIds = new int[20];
-    static int[] transactionMemberIds = new int[20];
-    static String[] transactionTypes = new String[20];
-    static int transactionCount = 0;
-
-    static int memberCount = 0;
     static int totalFineCollected = 0;
 
     static final int BORROW_LIMIT = 14;
@@ -31,55 +19,50 @@ public class LibraryManagementSystem {
 
         System.out.println("\n===== ALL BOOKS =====");
 
-        for (int i = 0; i < 5; i++) {
+        if (books.isEmpty()) {
+            System.out.println("No books available.");
+            return;
+        }
 
+        for (int i = 0; i < books.size(); i++) {
+            Book book = books.get(i);
             System.out.println("\nBook " + (i + 1));
-            System.out.println("Book ID      : " + bookIds[i]);
-            System.out.println("Book Title   : " + bookTitles[i]);
-            System.out.println("Author       : " + authors[i]);
-            System.out.println("Availability : "
-                    + (available[i] ? "Available" : "Issued"));
-
-            if (!available[i]) {
-                System.out.println("Issued To    : Member ID "
-                        + issuedToMember[i]);
-                System.out.println("Borrowed For : "
-                        + borrowedDays[i] + " days");
-            }
+            book.displayDetails();
         }
     }
 
-    public static int findBook(int searchId) {
+    public static Book findBook(int searchId) {
 
-        for (int i = 0; i < 5; i++) {
+        for (Book book : books) {
 
-            if (bookIds[i] == searchId) {
-                return i;
+            if (book.getBookId() == searchId) {
+                return book;
             }
         }
 
-        return -1;
+        return null;
     }
 
-    public static int findMember(int searchId) {
+    public static Member findMember(int searchId) {
 
-        for (int i = 0; i < memberCount; i++) {
+        for (Member member : members) {
 
-            if (memberIds[i] == searchId) {
-                return i;
+            if (member.getMemberId() == searchId) {
+                return member;
             }
         }
 
-        return -1;
+        return null;
     }
 
     public static int countBorrowedBooks(int memberId) {
 
         int count = 0;
 
-        for (int i = 0; i < 5; i++) {
+        for (Book book : books) {
 
-            if (!available[i] && issuedToMember[i] == memberId) {
+            if (!book.isAvailable()
+                    && book.getIssuedToMember() == memberId) {
                 count++;
             }
         }
@@ -92,15 +75,7 @@ public class LibraryManagementSystem {
             int memberId,
             String type) {
 
-        if (transactionCount >= transactionBookIds.length) {
-            System.out.println("Transaction history is full.");
-            return;
-        }
-
-        transactionBookIds[transactionCount] = bookId;
-        transactionMemberIds[transactionCount] = memberId;
-        transactionTypes[transactionCount] = type;
-        transactionCount++;
+        transactions.add(new Transaction(bookId, memberId, type));
     }
 
     public static void searchBook() {
@@ -108,16 +83,12 @@ public class LibraryManagementSystem {
         System.out.print("\nEnter Book ID to search: ");
         int searchId = sc.nextInt();
 
-        int index = findBook(searchId);
+        Book book = findBook(searchId);
 
-        if (index != -1) {
+        if (book != null) {
 
             System.out.println("\n===== BOOK FOUND =====");
-            System.out.println("Book ID      : " + bookIds[index]);
-            System.out.println("Book Title   : " + bookTitles[index]);
-            System.out.println("Author       : " + authors[index]);
-            System.out.println("Availability : "
-                    + (available[index] ? "Available" : "Issued"));
+            book.displayDetails();
 
         } else {
             System.out.println("Book not found.");
@@ -126,18 +97,13 @@ public class LibraryManagementSystem {
 
     public static void registerMember() {
 
-        if (memberCount == 5) {
-            System.out.println("Member limit reached.");
-            return;
-        }
-
         System.out.println("\n===== REGISTER MEMBER =====");
 
         System.out.print("Enter Member ID: ");
         int memberId = sc.nextInt();
         sc.nextLine();
 
-        if (findMember(memberId) != -1) {
+        if (findMember(memberId) != null) {
             System.out.println("Member ID already exists.");
             return;
         }
@@ -148,30 +114,24 @@ public class LibraryManagementSystem {
         System.out.print("Enter Phone Number: ");
         String phone = sc.nextLine();
 
-        memberIds[memberCount] = memberId;
-        memberNames[memberCount] = name;
-        memberPhones[memberCount] = phone;
-
-        memberCount++;
+        members.add(new Member(memberId, name, phone));
 
         System.out.println("Member registered successfully.");
     }
 
     public static void displayMembers() {
 
-        if (memberCount == 0) {
+        if (members.isEmpty()) {
             System.out.println("\nNo members registered.");
             return;
         }
 
         System.out.println("\n===== ALL MEMBERS =====");
 
-        for (int i = 0; i < memberCount; i++) {
+        for (int i = 0; i < members.size(); i++) {
 
             System.out.println("\nMember " + (i + 1));
-            System.out.println("Member ID : " + memberIds[i]);
-            System.out.println("Name      : " + memberNames[i]);
-            System.out.println("Phone     : " + memberPhones[i]);
+            members.get(i).displayDetails();
         }
     }
 
@@ -180,19 +140,19 @@ public class LibraryManagementSystem {
         System.out.print("\nEnter Book ID to issue: ");
         int bookId = sc.nextInt();
 
-        int bookIndex = findBook(bookId);
+        Book book = findBook(bookId);
 
-        if (bookIndex == -1) {
+        if (book == null) {
             System.out.println("Book not found.");
             return;
         }
 
-        if (!available[bookIndex]) {
+        if (!book.isAvailable()) {
             System.out.println("Book is already issued.");
             return;
         }
 
-        if (memberCount == 0) {
+        if (members.isEmpty()) {
             System.out.println("No members registered.");
             return;
         }
@@ -200,9 +160,9 @@ public class LibraryManagementSystem {
         System.out.print("Enter Member ID: ");
         int memberId = sc.nextInt();
 
-        int memberIndex = findMember(memberId);
+        Member member = findMember(memberId);
 
-        if (memberIndex == -1) {
+        if (member == null) {
             System.out.println("Member not found.");
             return;
         }
@@ -227,14 +187,12 @@ public class LibraryManagementSystem {
             return;
         }
 
-        available[bookIndex] = false;
-        issuedToMember[bookIndex] = memberId;
-        borrowedDays[bookIndex] = days;
+        book.issueTo(memberId, days);
         recordTransaction(bookId, memberId, "ISSUE");
 
         System.out.println("\nBook issued successfully.");
-        System.out.println("Book   : " + bookTitles[bookIndex]);
-        System.out.println("Member : " + memberNames[memberIndex]);
+        System.out.println("Book   : " + book.getTitle());
+        System.out.println("Member : " + member.getName());
         System.out.println("Days   : " + days);
     }
 
@@ -243,14 +201,14 @@ public class LibraryManagementSystem {
         System.out.print("\nEnter Book ID to return: ");
         int bookId = sc.nextInt();
 
-        int bookIndex = findBook(bookId);
+        Book book = findBook(bookId);
 
-        if (bookIndex == -1) {
+        if (book == null) {
             System.out.println("Book not found.");
             return;
         }
 
-        if (available[bookIndex]) {
+        if (book.isAvailable()) {
             System.out.println("Book is already available.");
             return;
         }
@@ -263,6 +221,7 @@ public class LibraryManagementSystem {
             return;
         }
 
+        int issuedMemberId = book.getIssuedToMember();
         int lateDays = actualDays - BORROW_LIMIT;
 
         if (lateDays < 0) {
@@ -272,8 +231,8 @@ public class LibraryManagementSystem {
         int fine = lateDays * FINE_PER_DAY;
 
         System.out.println("\n===== RETURN DETAILS =====");
-        System.out.println("Book         : " + bookTitles[bookIndex]);
-        System.out.println("Borrowed For : " + borrowedDays[bookIndex]
+        System.out.println("Book         : " + book.getTitle());
+        System.out.println("Borrowed For : " + book.getBorrowedDays()
                 + " days");
         System.out.println("Actual Days  : " + actualDays);
         System.out.println("Late Days    : " + lateDays);
@@ -286,10 +245,7 @@ public class LibraryManagementSystem {
             System.out.println("No fine.");
         }
 
-        int issuedMemberId = issuedToMember[bookIndex];
-        available[bookIndex] = true;
-        issuedToMember[bookIndex] = 0;
-        borrowedDays[bookIndex] = 0;
+        book.returnToAvailable();
         recordTransaction(bookId, issuedMemberId, "RETURN");
 
         System.out.println("Book returned successfully.");
@@ -306,12 +262,12 @@ public class LibraryManagementSystem {
 
         System.out.println("\n===== MEMBER BORROWING STATUS =====");
 
-        for (int i = 0; i < memberCount; i++) {
+        for (Member member : members) {
 
-            System.out.println("\nMember ID : " + memberIds[i]);
-            System.out.println("Name      : " + memberNames[i]);
+            System.out.println("\nMember ID : " + member.getMemberId());
+            System.out.println("Name      : " + member.getName());
             System.out.println("Books     : "
-                    + countBorrowedBooks(memberIds[i]) + "/"
+                + countBorrowedBooks(member.getMemberId()) + "/"
                     + MAX_BOOKS_PER_MEMBER);
         }
     }
@@ -321,9 +277,9 @@ public class LibraryManagementSystem {
         int availableBooks = 0;
         int issuedBooks = 0;
 
-        for (int i = 0; i < bookIds.length; i++) {
+        for (Book book : books) {
 
-            if (available[i]) {
+            if (book.isAvailable()) {
                 availableBooks++;
             } else {
                 issuedBooks++;
@@ -331,20 +287,20 @@ public class LibraryManagementSystem {
         }
 
         System.out.println("\n===== LIBRARY STATISTICS =====");
-        System.out.println("Total Books       : " + bookIds.length);
+        System.out.println("Total Books       : " + books.size());
         System.out.println("Available Books   : " + availableBooks);
         System.out.println("Issued Books      : " + issuedBooks);
-        System.out.println("Total Members     : " + memberCount);
+        System.out.println("Total Members     : " + members.size());
         System.out.println("Total Fine        : ₹" + totalFineCollected);
 
         System.out.println("\n===== MEMBER BORROWING SUMMARY =====");
 
-        for (int i = 0; i < memberCount; i++) {
+        for (Member member : members) {
 
-            System.out.println("\nMember ID : " + memberIds[i]);
-            System.out.println("Name      : " + memberNames[i]);
+            System.out.println("\nMember ID : " + member.getMemberId());
+            System.out.println("Name      : " + member.getName());
             System.out.println("Books     : "
-                    + countBorrowedBooks(memberIds[i]) + "/"
+                + countBorrowedBooks(member.getMemberId()) + "/"
                     + MAX_BOOKS_PER_MEMBER);
         }
     }
@@ -353,55 +309,60 @@ public class LibraryManagementSystem {
 
         System.out.println("\n===== TRANSACTION HISTORY =====");
 
-        if (transactionCount == 0) {
+        if (transactions.isEmpty()) {
             System.out.println("No transactions recorded.");
         } else {
-            for (int i = 0; i < transactionCount; i++) {
+            for (int i = 0; i < transactions.size(); i++) {
 
                 System.out.println("\nTransaction " + (i + 1));
-                System.out.println("Book ID      : " + transactionBookIds[i]);
-                System.out.println("Member ID    : " + transactionMemberIds[i]);
-                System.out.println("Type         : " + transactionTypes[i]);
+                transactions.get(i).displayDetails();
             }
         }
 
         int totalIssues = 0;
         int totalReturns = 0;
 
-        for (int i = 0; i < transactionCount; i++) {
+        for (Transaction transaction : transactions) {
 
-            if (transactionTypes[i].equals("ISSUE")) {
+            if (transaction.getType().equals("ISSUE")) {
                 totalIssues++;
-            } else if (transactionTypes[i].equals("RETURN")) {
+            } else if (transaction.getType().equals("RETURN")) {
                 totalReturns++;
             }
         }
 
-        System.out.println("\nTotal Transactions : " + transactionCount);
+        System.out.println("\nTotal Transactions : " + transactions.size());
         System.out.println("Total Issues       : " + totalIssues);
         System.out.println("Total Returns      : " + totalReturns);
     }
 
     public static void main(String[] args) {
 
-        // Add books
+        // Add the initial book catalog.
         for (int i = 0; i < 5; i++) {
 
             System.out.println("\nEnter details for Book " + (i + 1));
 
-            System.out.print("Book ID: ");
-            bookIds[i] = sc.nextInt();
-            sc.nextLine();
+            int bookId;
+            while (true) {
+                System.out.print("Book ID: ");
+                bookId = sc.nextInt();
+                sc.nextLine();
+
+                if (findBook(bookId) == null) {
+                    break;
+                }
+
+                System.out.println("Book ID already exists.");
+            }
 
             System.out.print("Book Title: ");
-            bookTitles[i] = sc.nextLine();
+            String title = sc.nextLine();
 
             System.out.print("Author: ");
-            authors[i] = sc.nextLine();
+            String author = sc.nextLine();
 
-            available[i] = true;
-            issuedToMember[i] = 0;
-            borrowedDays[i] = 0;
+            books.add(new Book(bookId, title, author));
         }
 
         int choice;
