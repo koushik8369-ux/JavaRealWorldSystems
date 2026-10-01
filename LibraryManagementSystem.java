@@ -18,6 +18,7 @@ public class LibraryManagementSystem {
 
     static final int BORROW_LIMIT = 14;
     static final int FINE_PER_DAY = 5;
+    static final int MAX_BOOKS_PER_MEMBER = 2;
 
     static Scanner sc = new Scanner(System.in);
 
@@ -65,6 +66,20 @@ public class LibraryManagementSystem {
         }
 
         return -1;
+    }
+
+    public static int countBorrowedBooks(int memberId) {
+
+        int count = 0;
+
+        for (int i = 0; i < 5; i++) {
+
+            if (!available[i] && issuedToMember[i] == memberId) {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     public static void searchBook() {
@@ -171,6 +186,12 @@ public class LibraryManagementSystem {
             return;
         }
 
+        if (countBorrowedBooks(memberId) >= MAX_BOOKS_PER_MEMBER) {
+            System.out.println("Member already has 2 books.");
+            System.out.println("Return a book before borrowing another.");
+            return;
+        }
+
         System.out.print("Enter borrowing days: ");
         int days = sc.nextInt();
 
@@ -257,6 +278,20 @@ public class LibraryManagementSystem {
                 + totalFineCollected);
     }
 
+    public static void displayMemberBorrowingStatus() {
+
+        System.out.println("\n===== MEMBER BORROWING STATUS =====");
+
+        for (int i = 0; i < memberCount; i++) {
+
+            System.out.println("\nMember ID : " + memberIds[i]);
+            System.out.println("Name      : " + memberNames[i]);
+            System.out.println("Books     : "
+                    + countBorrowedBooks(memberIds[i]) + "/"
+                    + MAX_BOOKS_PER_MEMBER);
+        }
+    }
+
     public static void main(String[] args) {
 
         // Add books
@@ -291,7 +326,8 @@ public class LibraryManagementSystem {
             System.out.println("5. Issue Book");
             System.out.println("6. Return Book");
             System.out.println("7. Fine Summary");
-            System.out.println("8. Exit");
+            System.out.println("8. Member Borrowing Status");
+            System.out.println("9. Exit");
 
             System.out.print("Enter your choice: ");
             choice = sc.nextInt();
@@ -327,6 +363,10 @@ public class LibraryManagementSystem {
                     break;
 
                 case 8:
+                    displayMemberBorrowingStatus();
+                    break;
+
+                case 9:
                     System.out.println(
                             "Thank you for using the Library System.");
                     sc.close();
