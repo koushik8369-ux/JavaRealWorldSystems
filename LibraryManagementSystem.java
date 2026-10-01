@@ -13,6 +13,11 @@ public class LibraryManagementSystem {
     static String[] memberNames = new String[5];
     static String[] memberPhones = new String[5];
 
+    static int[] transactionBookIds = new int[20];
+    static int[] transactionMemberIds = new int[20];
+    static String[] transactionTypes = new String[20];
+    static int transactionCount = 0;
+
     static int memberCount = 0;
     static int totalFineCollected = 0;
 
@@ -80,6 +85,22 @@ public class LibraryManagementSystem {
         }
 
         return count;
+    }
+
+    public static void recordTransaction(
+            int bookId,
+            int memberId,
+            String type) {
+
+        if (transactionCount >= transactionBookIds.length) {
+            System.out.println("Transaction history is full.");
+            return;
+        }
+
+        transactionBookIds[transactionCount] = bookId;
+        transactionMemberIds[transactionCount] = memberId;
+        transactionTypes[transactionCount] = type;
+        transactionCount++;
     }
 
     public static void searchBook() {
@@ -209,6 +230,7 @@ public class LibraryManagementSystem {
         available[bookIndex] = false;
         issuedToMember[bookIndex] = memberId;
         borrowedDays[bookIndex] = days;
+        recordTransaction(bookId, memberId, "ISSUE");
 
         System.out.println("\nBook issued successfully.");
         System.out.println("Book   : " + bookTitles[bookIndex]);
@@ -264,9 +286,11 @@ public class LibraryManagementSystem {
             System.out.println("No fine.");
         }
 
+        int issuedMemberId = issuedToMember[bookIndex];
         available[bookIndex] = true;
         issuedToMember[bookIndex] = 0;
         borrowedDays[bookIndex] = 0;
+        recordTransaction(bookId, issuedMemberId, "RETURN");
 
         System.out.println("Book returned successfully.");
     }
@@ -325,6 +349,39 @@ public class LibraryManagementSystem {
         }
     }
 
+    public static void displayTransactionHistory() {
+
+        System.out.println("\n===== TRANSACTION HISTORY =====");
+
+        if (transactionCount == 0) {
+            System.out.println("No transactions recorded.");
+        } else {
+            for (int i = 0; i < transactionCount; i++) {
+
+                System.out.println("\nTransaction " + (i + 1));
+                System.out.println("Book ID      : " + transactionBookIds[i]);
+                System.out.println("Member ID    : " + transactionMemberIds[i]);
+                System.out.println("Type         : " + transactionTypes[i]);
+            }
+        }
+
+        int totalIssues = 0;
+        int totalReturns = 0;
+
+        for (int i = 0; i < transactionCount; i++) {
+
+            if (transactionTypes[i].equals("ISSUE")) {
+                totalIssues++;
+            } else if (transactionTypes[i].equals("RETURN")) {
+                totalReturns++;
+            }
+        }
+
+        System.out.println("\nTotal Transactions : " + transactionCount);
+        System.out.println("Total Issues       : " + totalIssues);
+        System.out.println("Total Returns      : " + totalReturns);
+    }
+
     public static void main(String[] args) {
 
         // Add books
@@ -361,7 +418,8 @@ public class LibraryManagementSystem {
             System.out.println("7. Fine Summary");
             System.out.println("8. Member Borrowing Status");
             System.out.println("9. Library Statistics");
-            System.out.println("10. Exit");
+            System.out.println("10. Transaction History");
+            System.out.println("11. Exit");
 
             System.out.print("Enter your choice: ");
             choice = sc.nextInt();
@@ -405,6 +463,10 @@ public class LibraryManagementSystem {
                     break;
 
                 case 10:
+                    displayTransactionHistory();
+                    break;
+
+                case 11:
                     System.out.println(
                             "Thank you for using the Library System.");
                     sc.close();
