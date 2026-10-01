@@ -1,3 +1,9 @@
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Scanner;
 
@@ -12,8 +18,204 @@ public class LibraryManagementSystem {
     static final int BORROW_LIMIT = 14;
     static final int FINE_PER_DAY = 5;
     static final int MAX_BOOKS_PER_MEMBER = 2;
+    static final String BOOK_FILE = "books.txt";
+    static final String MEMBER_FILE = "members.txt";
+    static final String TRANSACTION_FILE = "transactions.txt";
 
     static Scanner sc = new Scanner(System.in);
+    private static boolean saveHadErrors = false;
+
+    public static void saveBooks() {
+
+        try (BufferedWriter writer = new BufferedWriter(
+                new FileWriter(BOOK_FILE))) {
+            for (Book book : books) {
+                writer.write(book.getBookId() + "|"
+                        + book.getTitle() + "|"
+                        + book.getAuthor() + "|"
+                        + book.isAvailable() + "|"
+                        + book.getIssuedToMember() + "|"
+                        + book.getBorrowedDays());
+                writer.newLine();
+            }
+        } catch (IOException | SecurityException e) {
+            saveHadErrors = true;
+            System.out.println("Error saving books: " + e.getMessage());
+        }
+    }
+
+    public static void saveMembers() {
+
+        try (BufferedWriter writer = new BufferedWriter(
+                new FileWriter(MEMBER_FILE))) {
+            for (Member member : members) {
+                writer.write(member.getMemberId() + "|"
+                        + member.getName() + "|"
+                        + member.getPhone());
+                writer.newLine();
+            }
+        } catch (IOException | SecurityException e) {
+            saveHadErrors = true;
+            System.out.println("Error saving members: " + e.getMessage());
+        }
+    }
+
+    public static void saveTransactions() {
+
+        try (BufferedWriter writer = new BufferedWriter(
+                new FileWriter(TRANSACTION_FILE))) {
+            for (Transaction transaction : transactions) {
+                writer.write(transaction.getBookId() + "|"
+                        + transaction.getMemberId() + "|"
+                        + transaction.getType());
+                writer.newLine();
+            }
+        } catch (IOException | SecurityException e) {
+            saveHadErrors = true;
+            System.out.println("Error saving transactions: " + e.getMessage());
+        }
+    }
+
+    public static void saveAllData() {
+        saveHadErrors = false;
+        saveBooks();
+        saveMembers();
+        saveTransactions();
+    }
+
+    public static void loadBooks() {
+
+        File file = new File(BOOK_FILE);
+        if (!file.exists()) {
+            return;
+        }
+
+        books.clear();
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            int lineNumber = 0;
+
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                try {
+                    String[] fields = line.split("\\|", -1);
+                    if (fields.length != 6) {
+                        throw new IllegalArgumentException(
+                                "invalid record at line " + lineNumber);
+                    }
+
+                    int bookId = Integer.parseInt(fields[0]);
+                    boolean available;
+                    if (fields[3].equalsIgnoreCase("true")) {
+                        available = true;
+                    } else if (fields[3].equalsIgnoreCase("false")) {
+                        available = false;
+                    } else {
+                        throw new IllegalArgumentException(
+                                "invalid availability at line " + lineNumber);
+                    }
+
+                    Book book = new Book(bookId, fields[1], fields[2]);
+                    book.restoreState(
+                            available,
+                            Integer.parseInt(fields[4]),
+                            Integer.parseInt(fields[5]));
+
+                    if (findBook(bookId) != null) {
+                        throw new IllegalArgumentException(
+                                "duplicate book ID at line " + lineNumber);
+                    }
+                    books.add(book);
+                } catch (IllegalArgumentException e) {
+                    System.out.println("Error loading books: " + e.getMessage());
+                }
+            }
+        } catch (IOException | SecurityException e) {
+            System.out.println("Error loading books: " + e.getMessage());
+        }
+    }
+
+    public static void loadMembers() {
+
+        File file = new File(MEMBER_FILE);
+        if (!file.exists()) {
+            return;
+        }
+
+        members.clear();
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            int lineNumber = 0;
+
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                try {
+                    String[] fields = line.split("\\|", -1);
+                    if (fields.length != 3) {
+                        throw new IllegalArgumentException(
+                                "invalid record at line " + lineNumber);
+                    }
+
+                    int memberId = Integer.parseInt(fields[0]);
+                    if (findMember(memberId) != null) {
+                        throw new IllegalArgumentException(
+                                "duplicate member ID at line " + lineNumber);
+                    }
+                    members.add(new Member(memberId, fields[1], fields[2]));
+                } catch (IllegalArgumentException e) {
+                    System.out.println("Error loading members: " + e.getMessage());
+                }
+            }
+        } catch (IOException | SecurityException e) {
+            System.out.println("Error loading members: " + e.getMessage());
+        }
+    }
+
+    public static void loadTransactions() {
+
+        File file = new File(TRANSACTION_FILE);
+        if (!file.exists()) {
+            return;
+        }
+
+        transactions.clear();
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            int lineNumber = 0;
+
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                try {
+                    String[] fields = line.split("\\|", -1);
+                    if (fields.length != 3) {
+                        throw new IllegalArgumentException(
+                                "invalid record at line " + lineNumber);
+                    }
+                    if (!fields[2].equals("ISSUE")
+                            && !fields[2].equals("RETURN")) {
+                        throw new IllegalArgumentException(
+                                "invalid transaction type at line " + lineNumber);
+                    }
+
+                    transactions.add(new Transaction(
+                            Integer.parseInt(fields[0]),
+                            Integer.parseInt(fields[1]),
+                            fields[2]));
+                } catch (IllegalArgumentException e) {
+                    System.out.println(
+                            "Error loading transactions: " + e.getMessage());
+                }
+            }
+        } catch (IOException | SecurityException e) {
+            System.out.println("Error loading transactions: " + e.getMessage());
+        }
+    }
+
+    public static void loadAllData() {
+        loadBooks();
+        loadMembers();
+        loadTransactions();
+    }
 
     public static void displayBooks() {
 
@@ -115,6 +317,7 @@ public class LibraryManagementSystem {
         String phone = sc.nextLine();
 
         members.add(new Member(memberId, name, phone));
+        saveAllData();
 
         System.out.println("Member registered successfully.");
     }
@@ -189,6 +392,7 @@ public class LibraryManagementSystem {
 
         book.issueTo(memberId, days);
         recordTransaction(bookId, memberId, "ISSUE");
+        saveAllData();
 
         System.out.println("\nBook issued successfully.");
         System.out.println("Book   : " + book.getTitle());
@@ -247,6 +451,7 @@ public class LibraryManagementSystem {
 
         book.returnToAvailable();
         recordTransaction(bookId, issuedMemberId, "RETURN");
+        saveAllData();
 
         System.out.println("Book returned successfully.");
     }
@@ -336,9 +541,8 @@ public class LibraryManagementSystem {
         System.out.println("Total Returns      : " + totalReturns);
     }
 
-    public static void main(String[] args) {
+    private static void addInitialBooks() {
 
-        // Add the initial book catalog.
         for (int i = 0; i < 5; i++) {
 
             System.out.println("\nEnter details for Book " + (i + 1));
@@ -364,6 +568,17 @@ public class LibraryManagementSystem {
 
             books.add(new Book(bookId, title, author));
         }
+    }
+
+    public static void main(String[] args) {
+
+        loadAllData();
+
+        if (books.isEmpty() && !new File(BOOK_FILE).exists()) {
+            System.out.println("No saved book data found.");
+            addInitialBooks();
+            saveAllData();
+        }
 
         int choice;
 
@@ -380,7 +595,8 @@ public class LibraryManagementSystem {
             System.out.println("8. Member Borrowing Status");
             System.out.println("9. Library Statistics");
             System.out.println("10. Transaction History");
-            System.out.println("11. Exit");
+            System.out.println("11. Save Data");
+            System.out.println("12. Exit");
 
             System.out.print("Enter your choice: ");
             choice = sc.nextInt();
@@ -428,6 +644,14 @@ public class LibraryManagementSystem {
                     break;
 
                 case 11:
+                    saveAllData();
+                    if (!saveHadErrors) {
+                        System.out.println("Data saved successfully.");
+                    }
+                    break;
+
+                case 12:
+                    saveAllData();
                     System.out.println(
                             "Thank you for using the Library System.");
                     sc.close();

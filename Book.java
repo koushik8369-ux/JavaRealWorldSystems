@@ -60,6 +60,15 @@ public class Book {
         borrowedDays = 0;
     }
 
+    public void restoreState(
+            boolean available,
+            int issuedToMember,
+            int borrowedDays) {
+        this.available = available;
+        this.issuedToMember = issuedToMember;
+        this.borrowedDays = borrowedDays;
+    }
+
     public void displayDetails() {
         System.out.println("Book ID      : " + bookId);
         System.out.println("Book Title   : " + title);

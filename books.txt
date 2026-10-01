@@ -1,0 +1,5 @@
+101|Book One|Author One|true|0|0
+102|Book Two|Author Two|false|1|7
+103|Book Three|Author Three|false|1|7
+104|Book Four|Author Four|true|0|0
+105|Book Five|Author Five|true|0|0
