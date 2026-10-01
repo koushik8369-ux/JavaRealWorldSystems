@@ -292,6 +292,39 @@ public class LibraryManagementSystem {
         }
     }
 
+    public static void displayLibraryStatistics() {
+
+        int availableBooks = 0;
+        int issuedBooks = 0;
+
+        for (int i = 0; i < bookIds.length; i++) {
+
+            if (available[i]) {
+                availableBooks++;
+            } else {
+                issuedBooks++;
+            }
+        }
+
+        System.out.println("\n===== LIBRARY STATISTICS =====");
+        System.out.println("Total Books       : " + bookIds.length);
+        System.out.println("Available Books   : " + availableBooks);
+        System.out.println("Issued Books      : " + issuedBooks);
+        System.out.println("Total Members     : " + memberCount);
+        System.out.println("Total Fine        : ₹" + totalFineCollected);
+
+        System.out.println("\n===== MEMBER BORROWING SUMMARY =====");
+
+        for (int i = 0; i < memberCount; i++) {
+
+            System.out.println("\nMember ID : " + memberIds[i]);
+            System.out.println("Name      : " + memberNames[i]);
+            System.out.println("Books     : "
+                    + countBorrowedBooks(memberIds[i]) + "/"
+                    + MAX_BOOKS_PER_MEMBER);
+        }
+    }
+
     public static void main(String[] args) {
 
         // Add books
@@ -327,7 +360,8 @@ public class LibraryManagementSystem {
             System.out.println("6. Return Book");
             System.out.println("7. Fine Summary");
             System.out.println("8. Member Borrowing Status");
-            System.out.println("9. Exit");
+            System.out.println("9. Library Statistics");
+            System.out.println("10. Exit");
 
             System.out.print("Enter your choice: ");
             choice = sc.nextInt();
@@ -367,6 +401,10 @@ public class LibraryManagementSystem {
                     break;
 
                 case 9:
+                    displayLibraryStatistics();
+                    break;
+
+                case 10:
                     System.out.println(
                             "Thank you for using the Library System.");
                     sc.close();
