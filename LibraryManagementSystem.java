@@ -21,9 +21,95 @@ public class LibraryManagementSystem {
     static final String BOOK_FILE = "books.txt";
     static final String MEMBER_FILE = "members.txt";
     static final String TRANSACTION_FILE = "transactions.txt";
+    static final String ADMIN_FILE = "admin.txt";
 
     static Scanner sc = new Scanner(System.in);
     private static boolean saveHadErrors = false;
+    private static Admin admin;
+
+    private static int readInt(String prompt) {
+
+        while (true) {
+            System.out.print(prompt);
+            String input = sc.nextLine().trim();
+
+            try {
+                return Integer.parseInt(input);
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid number. Please enter a whole number.");
+            }
+        }
+    }
+
+    public static void loadAdminCredentials() {
+
+        File file = new File(ADMIN_FILE);
+
+        if (!file.exists()) {
+            try {
+                if (file.createNewFile()) {
+                    try (BufferedWriter writer = new BufferedWriter(
+                            new FileWriter(file))) {
+                        writer.write("admin|admin123");
+                        writer.newLine();
+                    }
+                }
+            } catch (IOException | SecurityException e) {
+                System.out.println("Error creating admin credentials: "
+                        + e.getMessage());
+                return;
+            }
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line = reader.readLine();
+            if (line == null) {
+                System.out.println("Error loading admin credentials: file is empty.");
+                return;
+            }
+
+            String[] fields = line.split("\\|", -1);
+            if (fields.length != 2
+                    || fields[0].isEmpty()
+                    || fields[1].isEmpty()) {
+                System.out.println("Error loading admin credentials: invalid file format.");
+                return;
+            }
+
+            admin = new Admin(fields[0], fields[1]);
+        } catch (IOException | SecurityException e) {
+            System.out.println("Error loading admin credentials: "
+                    + e.getMessage());
+        }
+    }
+
+    public static boolean login() {
+
+        System.out.println("\n===== LIBRARY ADMIN LOGIN =====");
+
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            System.out.print("Username: ");
+            String username = sc.nextLine();
+            System.out.print("Password: ");
+            String password = sc.nextLine();
+
+            if (admin != null && admin.authenticate(username, password)) {
+                System.out.println("Login successful.");
+                System.out.println("Welcome, Admin!");
+                return true;
+            }
+
+            System.out.println("Invalid username or password.");
+            if (attempt == 3) {
+                System.out.println("Maximum login attempts exceeded.");
+                System.out.println("Program terminated.");
+                return false;
+            }
+            System.out.println("Attempts remaining: " + (3 - attempt));
+        }
+
+        return false;
+    }
 
     public static void saveBooks() {
 
@@ -283,7 +369,7 @@ public class LibraryManagementSystem {
     public static void searchBook() {
 
         System.out.print("\nEnter Book ID to search: ");
-        int searchId = sc.nextInt();
+        int searchId = readInt("");
 
         Book book = findBook(searchId);
 
@@ -301,9 +387,7 @@ public class LibraryManagementSystem {
 
         System.out.println("\n===== REGISTER MEMBER =====");
 
-        System.out.print("Enter Member ID: ");
-        int memberId = sc.nextInt();
-        sc.nextLine();
+        int memberId = readInt("Enter Member ID: ");
 
         if (findMember(memberId) != null) {
             System.out.println("Member ID already exists.");
@@ -341,7 +425,7 @@ public class LibraryManagementSystem {
     public static void issueBook() {
 
         System.out.print("\nEnter Book ID to issue: ");
-        int bookId = sc.nextInt();
+        int bookId = readInt("");
 
         Book book = findBook(bookId);
 
@@ -360,8 +444,7 @@ public class LibraryManagementSystem {
             return;
         }
 
-        System.out.print("Enter Member ID: ");
-        int memberId = sc.nextInt();
+        int memberId = readInt("Enter Member ID: ");
 
         Member member = findMember(memberId);
 
@@ -376,8 +459,7 @@ public class LibraryManagementSystem {
             return;
         }
 
-        System.out.print("Enter borrowing days: ");
-        int days = sc.nextInt();
+        int days = readInt("Enter borrowing days: ");
 
         if (days <= 0) {
             System.out.println("Borrowing days must be greater than 0.");
@@ -403,7 +485,7 @@ public class LibraryManagementSystem {
     public static void returnBook() {
 
         System.out.print("\nEnter Book ID to return: ");
-        int bookId = sc.nextInt();
+        int bookId = readInt("");
 
         Book book = findBook(bookId);
 
@@ -417,8 +499,7 @@ public class LibraryManagementSystem {
             return;
         }
 
-        System.out.print("Enter actual days kept: ");
-        int actualDays = sc.nextInt();
+        int actualDays = readInt("Enter actual days kept: ");
 
         if (actualDays <= 0) {
             System.out.println("Days must be greater than 0.");
@@ -549,9 +630,7 @@ public class LibraryManagementSystem {
 
             int bookId;
             while (true) {
-                System.out.print("Book ID: ");
-                bookId = sc.nextInt();
-                sc.nextLine();
+                bookId = readInt("Book ID: ");
 
                 if (findBook(bookId) == null) {
                     break;
@@ -572,17 +651,31 @@ public class LibraryManagementSystem {
 
     public static void main(String[] args) {
 
-        loadAllData();
-
-        if (books.isEmpty() && !new File(BOOK_FILE).exists()) {
-            System.out.println("No saved book data found.");
-            addInitialBooks();
-            saveAllData();
-        }
-
-        int choice;
+        loadAdminCredentials();
+        boolean loggedIn = false;
+        boolean libraryDataLoaded = false;
 
         while (true) {
+
+            if (!loggedIn) {
+                if (!login()) {
+                    sc.close();
+                    return;
+                }
+
+                loggedIn = true;
+                if (!libraryDataLoaded) {
+                    loadAllData();
+
+                    if (books.isEmpty() && !new File(BOOK_FILE).exists()) {
+                        System.out.println("No saved book data found.");
+                        addInitialBooks();
+                        saveAllData();
+                    }
+
+                    libraryDataLoaded = true;
+                }
+            }
 
             System.out.println("\n===== LIBRARY MANAGEMENT SYSTEM =====");
             System.out.println("1. Display All Books");
@@ -596,10 +689,10 @@ public class LibraryManagementSystem {
             System.out.println("9. Library Statistics");
             System.out.println("10. Transaction History");
             System.out.println("11. Save Data");
-            System.out.println("12. Exit");
+            System.out.println("12. Logout");
+            System.out.println("13. Exit");
 
-            System.out.print("Enter your choice: ");
-            choice = sc.nextInt();
+            int choice = readInt("Enter your choice: ");
 
             switch (choice) {
 
@@ -652,8 +745,13 @@ public class LibraryManagementSystem {
 
                 case 12:
                     saveAllData();
-                    System.out.println(
-                            "Thank you for using the Library System.");
+                    loggedIn = false;
+                    System.out.println("Logged out successfully.");
+                    break;
+
+                case 13:
+                    saveAllData();
+                    System.out.println("Goodbye!");
                     sc.close();
                     return;
 
