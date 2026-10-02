@@ -5,6 +5,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Scanner;
 
 public class LibraryManagementSystem {
@@ -12,6 +13,7 @@ public class LibraryManagementSystem {
     private static final ArrayList<Book> books = new ArrayList<>();
     private static final ArrayList<Member> members = new ArrayList<>();
     private static final ArrayList<Transaction> transactions = new ArrayList<>();
+    private static final ArrayList<User> users = new ArrayList<>();
 
     static int totalFineCollected = 0;
 
@@ -22,10 +24,11 @@ public class LibraryManagementSystem {
     static final String MEMBER_FILE = "members.txt";
     static final String TRANSACTION_FILE = "transactions.txt";
     static final String ADMIN_FILE = "admin.txt";
+    static final String USERS_FILE = "users.txt";
 
     static Scanner sc = new Scanner(System.in);
     private static boolean saveHadErrors = false;
-    private static Admin admin;
+    static User currentUser;
 
     private static int readInt(String prompt) {
 
@@ -41,61 +44,251 @@ public class LibraryManagementSystem {
         }
     }
 
-    public static void loadAdminCredentials() {
+    private static User findUser(String username) {
+        for (User user : users) {
+            if (user.getUsername().equals(username)) {
+                return user;
+            }
+        }
+        return null;
+    }
 
-        File file = new File(ADMIN_FILE);
+    private static void createInitialUsers(File file) {
+        ArrayList<User> initialUsers = new ArrayList<>();
+        File legacyAdminFile = new File(ADMIN_FILE);
 
-        if (!file.exists()) {
-            try {
-                if (file.createNewFile()) {
-                    try (BufferedWriter writer = new BufferedWriter(
-                            new FileWriter(file))) {
-                        writer.write("admin|admin123");
-                        writer.newLine();
-                    }
+        if (legacyAdminFile.exists()) {
+            try (BufferedReader reader = new BufferedReader(
+                    new FileReader(legacyAdminFile))) {
+                String line = reader.readLine();
+                String[] fields = line == null
+                        ? new String[0] : line.split("\\|", -1);
+                if (fields.length == 2
+                        && !fields[0].isEmpty()
+                        && !fields[1].isEmpty()) {
+                    initialUsers.add(new User(
+                            fields[0], fields[1], User.ADMIN));
+                } else {
+                    System.out.println(
+                            "Error migrating admin credentials: invalid file format.");
                 }
             } catch (IOException | SecurityException e) {
-                System.out.println("Error creating admin credentials: "
+                System.out.println("Error migrating admin credentials: "
                         + e.getMessage());
+            }
+        } else {
+            initialUsers.add(new User("admin", "admin123", User.ADMIN));
+        }
+
+        if (findInitialUser(initialUsers, "librarian") == null) {
+            initialUsers.add(new User("librarian", "lib123", User.LIBRARIAN));
+        }
+
+        try {
+            if (!file.createNewFile()) {
                 return;
             }
+            try (BufferedWriter writer = new BufferedWriter(
+                    new FileWriter(file))) {
+                for (User user : initialUsers) {
+                    writer.write(user.getUsername() + "|"
+                            + user.getPassword() + "|" + user.getRole());
+                    writer.newLine();
+                }
+            }
+        } catch (IOException | SecurityException e) {
+            System.out.println("Error creating user credentials: "
+                    + e.getMessage());
+        }
+    }
+
+    private static User findInitialUser(ArrayList<User> initialUsers,
+            String username) {
+        for (User user : initialUsers) {
+            if (user.getUsername().equals(username)) {
+                return user;
+            }
+        }
+        return null;
+    }
+
+    public static void loadUsers() {
+        users.clear();
+        File file = new File(USERS_FILE);
+        if (!file.exists()) {
+            createInitialUsers(file);
+        }
+
+        if (!file.exists()) {
+            return;
         }
 
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line = reader.readLine();
-            if (line == null) {
-                System.out.println("Error loading admin credentials: file is empty.");
-                return;
+            String line;
+            int lineNumber = 0;
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                String[] fields = line.split("\\|", -1);
+                if (fields.length != 3
+                        || fields[0].isEmpty()
+                        || fields[1].isEmpty()
+                        || !User.isValidRole(fields[2])
+                        || findUser(fields[0]) != null) {
+                    System.out.println("Error loading users: invalid record at line "
+                            + lineNumber + ".");
+                    continue;
+                }
+                users.add(new User(fields[0], fields[1], fields[2]));
             }
-
-            String[] fields = line.split("\\|", -1);
-            if (fields.length != 2
-                    || fields[0].isEmpty()
-                    || fields[1].isEmpty()) {
-                System.out.println("Error loading admin credentials: invalid file format.");
-                return;
-            }
-
-            admin = new Admin(fields[0], fields[1]);
         } catch (IOException | SecurityException e) {
-            System.out.println("Error loading admin credentials: "
-                    + e.getMessage());
+            System.out.println("Error loading users: " + e.getMessage());
+        }
+    }
+
+    public static void saveUsers() {
+        try (BufferedWriter writer = new BufferedWriter(
+                new FileWriter(USERS_FILE))) {
+            for (User user : users) {
+                writer.write(user.getUsername() + "|"
+                        + user.getPassword() + "|" + user.getRole());
+                writer.newLine();
+            }
+        } catch (IOException | SecurityException e) {
+            saveHadErrors = true;
+            System.out.println("Error saving users: " + e.getMessage());
+        }
+    }
+
+    private static boolean requireAdmin() {
+        if (currentUser == null || !currentUser.isAdmin()) {
+            System.out.println("Access denied. Admin privileges required.");
+            return false;
+        }
+        return true;
+    }
+
+    public static void displayUsers() {
+        if (!requireAdmin()) {
+            return;
+        }
+
+        if (users.isEmpty()) {
+            System.out.println("No users found.");
+            return;
+        }
+
+        for (User user : users) {
+            System.out.println("Username : " + user.getUsername());
+            System.out.println("Role     : " + user.getRole());
+            System.out.println();
+        }
+    }
+
+    public static void addUser() {
+        if (!requireAdmin()) {
+            return;
+        }
+
+        System.out.println("Enter username:");
+        String username = sc.nextLine().trim();
+        System.out.println("Enter password:");
+        String password = sc.nextLine();
+        System.out.println("Enter role (ADMIN/LIBRARIAN):");
+        String role = sc.nextLine().trim().toUpperCase(Locale.ROOT);
+
+        if (username.isEmpty() || password.isEmpty()) {
+            System.out.println("Username and password cannot be empty.");
+            return;
+        }
+        if (username.contains("|") || password.contains("|")) {
+            System.out.println("Username and password cannot contain |.");
+            return;
+        }
+        if (findUser(username) != null) {
+            System.out.println("Username already exists.");
+            return;
+        }
+        if (!User.isValidRole(role)) {
+            System.out.println("Role must be ADMIN or LIBRARIAN.");
+            return;
+        }
+
+        users.add(new User(username, password, role));
+        saveUsers();
+        System.out.println("User added successfully.");
+    }
+
+    public static void removeUser() {
+        if (!requireAdmin()) {
+            return;
+        }
+
+        System.out.println("Enter username to remove:");
+        String username = sc.nextLine().trim();
+        if (currentUser.getUsername().equals(username)) {
+            System.out.println("Cannot remove the currently logged-in user.");
+            return;
+        }
+
+        User user = findUser(username);
+        if (user == null) {
+            System.out.println("User not found.");
+            return;
+        }
+
+        users.remove(user);
+        saveUsers();
+        System.out.println("User removed successfully.");
+    }
+
+    public static void manageUsers() {
+        if (!requireAdmin()) {
+            return;
+        }
+
+        while (true) {
+            System.out.println("\n===== USER MANAGEMENT =====");
+            System.out.println("1. Display Users");
+            System.out.println("2. Add User");
+            System.out.println("3. Remove User");
+            System.out.println("4. Back");
+
+            int choice = readInt("Enter your choice: ");
+            switch (choice) {
+                case 1:
+                    displayUsers();
+                    break;
+                case 2:
+                    addUser();
+                    break;
+                case 3:
+                    removeUser();
+                    break;
+                case 4:
+                    return;
+                default:
+                    System.out.println("Invalid choice. Please try again.");
+            }
         }
     }
 
     public static boolean login() {
 
-        System.out.println("\n===== LIBRARY ADMIN LOGIN =====");
+        System.out.println("\n===== LIBRARY LOGIN =====");
 
         for (int attempt = 1; attempt <= 3; attempt++) {
-            System.out.print("Username: ");
-            String username = sc.nextLine();
-            System.out.print("Password: ");
+            System.out.println();
+            System.out.println("Username:");
+            String username = sc.nextLine().trim();
+            System.out.println("Password:");
             String password = sc.nextLine();
 
-            if (admin != null && admin.authenticate(username, password)) {
+            User user = findUser(username);
+            if (user != null && user.authenticate(username, password)) {
+                currentUser = user;
                 System.out.println("Login successful.");
-                System.out.println("Welcome, Admin!");
+                System.out.println("Welcome, " + user.getUsername() + "!");
+                System.out.println("Role: " + user.getRole());
                 return true;
             }
 
@@ -167,6 +360,7 @@ public class LibraryManagementSystem {
         saveBooks();
         saveMembers();
         saveTransactions();
+        saveUsers();
     }
 
     public static void loadBooks() {
@@ -385,6 +579,10 @@ public class LibraryManagementSystem {
 
     public static void registerMember() {
 
+        if (!requireAdmin()) {
+            return;
+        }
+
         System.out.println("\n===== REGISTER MEMBER =====");
 
         int memberId = readInt("Enter Member ID: ");
@@ -539,6 +737,10 @@ public class LibraryManagementSystem {
 
     public static void showFineSummary() {
 
+        if (!requireAdmin()) {
+            return;
+        }
+
         System.out.println("\n===== FINE SUMMARY =====");
         System.out.println("Total Fine Collected : ₹"
                 + totalFineCollected);
@@ -651,19 +853,17 @@ public class LibraryManagementSystem {
 
     public static void main(String[] args) {
 
-        loadAdminCredentials();
-        boolean loggedIn = false;
+        loadUsers();
         boolean libraryDataLoaded = false;
 
         while (true) {
 
-            if (!loggedIn) {
+            if (currentUser == null) {
                 if (!login()) {
                     sc.close();
                     return;
                 }
 
-                loggedIn = true;
                 if (!libraryDataLoaded) {
                     loadAllData();
 
@@ -680,17 +880,30 @@ public class LibraryManagementSystem {
             System.out.println("\n===== LIBRARY MANAGEMENT SYSTEM =====");
             System.out.println("1. Display All Books");
             System.out.println("2. Search Book");
-            System.out.println("3. Register Member");
-            System.out.println("4. Display Members");
-            System.out.println("5. Issue Book");
-            System.out.println("6. Return Book");
-            System.out.println("7. Fine Summary");
-            System.out.println("8. Member Borrowing Status");
-            System.out.println("9. Library Statistics");
-            System.out.println("10. Transaction History");
-            System.out.println("11. Save Data");
-            System.out.println("12. Logout");
-            System.out.println("13. Exit");
+            if (currentUser.isAdmin()) {
+                System.out.println("3. Register Member");
+                System.out.println("4. Display Members");
+                System.out.println("5. Issue Book");
+                System.out.println("6. Return Book");
+                System.out.println("7. Fine Summary");
+                System.out.println("8. Member Borrowing Status");
+                System.out.println("9. Library Statistics");
+                System.out.println("10. Transaction History");
+                System.out.println("11. Save Data");
+                System.out.println("12. Manage Users");
+                System.out.println("13. Logout");
+                System.out.println("14. Exit");
+            } else {
+                System.out.println("3. Display Members");
+                System.out.println("4. Issue Book");
+                System.out.println("5. Return Book");
+                System.out.println("6. Member Borrowing Status");
+                System.out.println("7. Library Statistics");
+                System.out.println("8. Transaction History");
+                System.out.println("9. Save Data");
+                System.out.println("10. Logout");
+                System.out.println("11. Exit");
+            }
 
             int choice = readInt("Enter your choice: ");
 
@@ -705,55 +918,117 @@ public class LibraryManagementSystem {
                     break;
 
                 case 3:
-                    registerMember();
+                    if (currentUser.isAdmin()) {
+                        registerMember();
+                    } else {
+                        displayMembers();
+                    }
                     break;
 
                 case 4:
-                    displayMembers();
+                    if (currentUser.isAdmin()) {
+                        displayMembers();
+                    } else {
+                        issueBook();
+                    }
                     break;
 
                 case 5:
-                    issueBook();
+                    if (currentUser.isAdmin()) {
+                        issueBook();
+                    } else {
+                        returnBook();
+                    }
                     break;
 
                 case 6:
-                    returnBook();
+                    if (currentUser.isAdmin()) {
+                        returnBook();
+                    } else {
+                        displayMemberBorrowingStatus();
+                    }
                     break;
 
                 case 7:
-                    showFineSummary();
+                    if (currentUser.isAdmin()) {
+                        showFineSummary();
+                    } else {
+                        displayLibraryStatistics();
+                    }
                     break;
 
                 case 8:
-                    displayMemberBorrowingStatus();
+                    if (currentUser.isAdmin()) {
+                        displayMemberBorrowingStatus();
+                    } else {
+                        displayTransactionHistory();
+                    }
                     break;
 
                 case 9:
-                    displayLibraryStatistics();
+                    if (currentUser.isAdmin()) {
+                        displayLibraryStatistics();
+                    } else {
+                        saveAllData();
+                        if (!saveHadErrors) {
+                            System.out.println("Data saved successfully.");
+                        }
+                    }
                     break;
 
                 case 10:
-                    displayTransactionHistory();
+                    if (currentUser.isAdmin()) {
+                        displayTransactionHistory();
+                    } else {
+                        saveAllData();
+                        currentUser = null;
+                        System.out.println("Logged out successfully.");
+                    }
                     break;
 
                 case 11:
-                    saveAllData();
-                    if (!saveHadErrors) {
-                        System.out.println("Data saved successfully.");
+                    if (currentUser.isAdmin()) {
+                        saveAllData();
+                        if (!saveHadErrors) {
+                            System.out.println("Data saved successfully.");
+                        }
+                    } else {
+                        saveAllData();
+                        System.out.println("Goodbye!");
+                        sc.close();
+                        return;
                     }
                     break;
 
                 case 12:
-                    saveAllData();
-                    loggedIn = false;
-                    System.out.println("Logged out successfully.");
+                    if (currentUser.isAdmin()) {
+                        manageUsers();
+                    } else {
+                        System.out.println(
+                                "Invalid choice. Please try again.");
+                    }
                     break;
 
                 case 13:
-                    saveAllData();
-                    System.out.println("Goodbye!");
-                    sc.close();
-                    return;
+                    if (currentUser.isAdmin()) {
+                        saveAllData();
+                        currentUser = null;
+                        System.out.println("Logged out successfully.");
+                    } else {
+                        System.out.println(
+                                "Invalid choice. Please try again.");
+                    }
+                    break;
+
+                case 14:
+                    if (currentUser.isAdmin()) {
+                        saveAllData();
+                        System.out.println("Goodbye!");
+                        sc.close();
+                        return;
+                    }
+                    System.out.println("Invalid choice. Please try again.");
+                    break;
 
                 default:
                     System.out.println(

@@ -1,0 +1,2 @@
+admin|admin123|ADMIN
+librarian|lib123|LIBRARIAN
