@@ -877,7 +877,9 @@ public class LibraryManagementSystem {
                 }
             }
 
-            System.out.println("\n===== LIBRARY MANAGEMENT SYSTEM =====");
+                System.out.println(currentUser.isAdmin()
+                    ? "\n===== ADMIN MENU ====="
+                    : "\n===== LIBRARIAN MENU =====");
             System.out.println("1. Display All Books");
             System.out.println("2. Search Book");
             if (currentUser.isAdmin()) {
