@@ -63,11 +63,14 @@ public class JobRecruitmentManagementSystem {
                     searchCandidate(scanner);
                     break;
                 case 13:
+                    advancedJobSearchMenu(scanner);
+                    break;
+                case 14:
                     System.out.println("Thank you for using Job Recruitment Management System.");
                     running = false;
                     break;
                 default:
-                    System.out.println("Invalid choice. Please select an option between 1 and 13.");
+                    System.out.println("Invalid choice. Please select an option between 1 and 14.");
                     break;
             }
         }
@@ -87,9 +90,10 @@ public class JobRecruitmentManagementSystem {
         System.out.println("8. Display All Candidates");
         System.out.println("9. Search Company");
         System.out.println("10. Search Recruiter");
-        System.out.println("11. Search Job");
-        System.out.println("12. Search Candidate");
-        System.out.println("13. Exit");
+        System.out.println("11. Search Job by ID");
+        System.out.println("12. Search Candidate by ID");
+        System.out.println("13. Advanced Job Search");
+        System.out.println("14. Exit");
     }
 
     private static void registerCompany(Scanner scanner) {
@@ -476,6 +480,217 @@ public class JobRecruitmentManagementSystem {
             candidate.displayDetails();
         } else {
             System.out.println("Candidate not found.");
+        }
+    }
+
+    private static void advancedJobSearchMenu(Scanner scanner) {
+        boolean inSubMenu = true;
+        while (inSubMenu) {
+            System.out.println("\n===== ADVANCED JOB SEARCH =====\n");
+            System.out.println("1. Search by Job Title");
+            System.out.println("2. Search by Company");
+            System.out.println("3. Search by Location");
+            System.out.println("4. Filter by Job Type");
+            System.out.println("5. Filter by Maximum Salary");
+            System.out.println("6. Combined Search");
+            System.out.println("7. Back");
+            System.out.print("Enter your choice: ");
+            String input = scanner.nextLine().trim();
+
+            int choice;
+            try {
+                choice = Integer.parseInt(input);
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid choice. Please enter a valid number.");
+                continue;
+            }
+
+            switch (choice) {
+                case 1:
+                    searchByJobTitle(scanner);
+                    break;
+                case 2:
+                    searchByCompany(scanner);
+                    break;
+                case 3:
+                    searchByLocation(scanner);
+                    break;
+                case 4:
+                    filterByJobType(scanner);
+                    break;
+                case 5:
+                    filterByMaxSalary(scanner);
+                    break;
+                case 6:
+                    combinedJobSearch(scanner);
+                    break;
+                case 7:
+                    inSubMenu = false;
+                    break;
+                default:
+                    System.out.println("Invalid choice. Please select an option between 1 and 7.");
+                    break;
+            }
+        }
+    }
+
+    private static void searchByJobTitle(Scanner scanner) {
+        System.out.print("Enter Job Title: ");
+        String title = scanner.nextLine().trim();
+        if (title.isEmpty()) {
+            System.out.println("Job title cannot be empty.");
+            return;
+        }
+
+        ArrayList<Job> results = new ArrayList<>();
+        for (Job job : jobs) {
+            if (job.getJobTitle().toLowerCase().contains(title.toLowerCase())) {
+                results.add(job);
+            }
+        }
+        displayJobResults(results);
+    }
+
+    private static void searchByCompany(Scanner scanner) {
+        System.out.print("Enter Company Name: ");
+        String company = scanner.nextLine().trim();
+        if (company.isEmpty()) {
+            System.out.println("Company name cannot be empty.");
+            return;
+        }
+
+        ArrayList<Job> results = new ArrayList<>();
+        for (Job job : jobs) {
+            if (job.getCompanyName().toLowerCase().contains(company.toLowerCase())) {
+                results.add(job);
+            }
+        }
+        displayJobResults(results);
+    }
+
+    private static void searchByLocation(Scanner scanner) {
+        System.out.print("Enter Location: ");
+        String location = scanner.nextLine().trim();
+        if (location.isEmpty()) {
+            System.out.println("Location cannot be empty.");
+            return;
+        }
+
+        ArrayList<Job> results = new ArrayList<>();
+        for (Job job : jobs) {
+            if (job.getLocation().toLowerCase().contains(location.toLowerCase())) {
+                results.add(job);
+            }
+        }
+        displayJobResults(results);
+    }
+
+    private static void filterByJobType(Scanner scanner) {
+        System.out.print("Enter Job Type: ");
+        String jobType = scanner.nextLine().trim();
+        if (jobType.isEmpty()) {
+            System.out.println("Job type cannot be empty.");
+            return;
+        }
+
+        ArrayList<Job> results = new ArrayList<>();
+        for (Job job : jobs) {
+            if (job.getJobType().toLowerCase().contains(jobType.toLowerCase())) {
+                results.add(job);
+            }
+        }
+        displayJobResults(results);
+    }
+
+    private static void filterByMaxSalary(Scanner scanner) {
+        System.out.print("Enter Maximum Salary: ");
+        String salaryStr = scanner.nextLine().trim();
+        double maxSalary;
+        try {
+            maxSalary = Double.parseDouble(salaryStr);
+            if (maxSalary <= 0) {
+                System.out.println("Invalid salary.");
+                return;
+            }
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid salary.");
+            return;
+        }
+
+        ArrayList<Job> results = new ArrayList<>();
+        for (Job job : jobs) {
+            if (job.getSalary() <= maxSalary) {
+                results.add(job);
+            }
+        }
+        displayJobResults(results);
+    }
+
+    private static void combinedJobSearch(Scanner scanner) {
+        System.out.println("\n===== COMBINED JOB SEARCH =====\n");
+        System.out.print("Enter Job Title (press Enter to skip): ");
+        String title = scanner.nextLine().trim();
+
+        System.out.print("Enter Company (press Enter to skip): ");
+        String company = scanner.nextLine().trim();
+
+        System.out.print("Enter Location (press Enter to skip): ");
+        String location = scanner.nextLine().trim();
+
+        System.out.print("Enter Job Type (press Enter to skip): ");
+        String jobType = scanner.nextLine().trim();
+
+        System.out.print("Enter Maximum Salary (press Enter to skip): ");
+        String salaryStr = scanner.nextLine().trim();
+
+        boolean hasMaxSalary = false;
+        double maxSalary = 0;
+        if (!salaryStr.isEmpty()) {
+            try {
+                maxSalary = Double.parseDouble(salaryStr);
+                if (maxSalary <= 0) {
+                    System.out.println("Invalid salary.");
+                    return;
+                }
+                hasMaxSalary = true;
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid salary.");
+                return;
+            }
+        }
+
+        ArrayList<Job> results = new ArrayList<>();
+        for (Job job : jobs) {
+            if (!title.isEmpty() && !job.getJobTitle().toLowerCase().contains(title.toLowerCase())) {
+                continue;
+            }
+            if (!company.isEmpty() && !job.getCompanyName().toLowerCase().contains(company.toLowerCase())) {
+                continue;
+            }
+            if (!location.isEmpty() && !job.getLocation().toLowerCase().contains(location.toLowerCase())) {
+                continue;
+            }
+            if (!jobType.isEmpty() && !job.getJobType().toLowerCase().contains(jobType.toLowerCase())) {
+                continue;
+            }
+            if (hasMaxSalary && job.getSalary() > maxSalary) {
+                continue;
+            }
+            results.add(job);
+        }
+        displayJobResults(results);
+    }
+
+    private static void displayJobResults(ArrayList<Job> results) {
+        if (results.isEmpty()) {
+            System.out.println("No matching jobs found.");
+            return;
+        }
+
+        System.out.println("\n===== SEARCH RESULTS =====");
+        for (Job job : results) {
+            System.out.println();
+            job.displayDetails();
         }
     }
 
