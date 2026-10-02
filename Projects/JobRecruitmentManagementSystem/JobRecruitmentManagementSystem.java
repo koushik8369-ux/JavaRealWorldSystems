@@ -66,11 +66,14 @@ public class JobRecruitmentManagementSystem {
                     advancedJobSearchMenu(scanner);
                     break;
                 case 14:
+                    advancedCandidateSearchMenu(scanner);
+                    break;
+                case 15:
                     System.out.println("Thank you for using Job Recruitment Management System.");
                     running = false;
                     break;
                 default:
-                    System.out.println("Invalid choice. Please select an option between 1 and 14.");
+                    System.out.println("Invalid choice. Please select an option between 1 and 15.");
                     break;
             }
         }
@@ -93,7 +96,8 @@ public class JobRecruitmentManagementSystem {
         System.out.println("11. Search Job by ID");
         System.out.println("12. Search Candidate by ID");
         System.out.println("13. Advanced Job Search");
-        System.out.println("14. Exit");
+        System.out.println("14. Advanced Candidate Search");
+        System.out.println("15. Exit");
     }
 
     private static void registerCompany(Scanner scanner) {
@@ -691,6 +695,190 @@ public class JobRecruitmentManagementSystem {
         for (Job job : results) {
             System.out.println();
             job.displayDetails();
+        }
+    }
+
+    private static void advancedCandidateSearchMenu(Scanner scanner) {
+        boolean inSubMenu = true;
+        while (inSubMenu) {
+            System.out.println("\n===== ADVANCED CANDIDATE SEARCH =====\n");
+            System.out.println("1. Search by Name");
+            System.out.println("2. Search by Skill");
+            System.out.println("3. Search by Email");
+            System.out.println("4. Filter by Maximum Age");
+            System.out.println("5. Combined Search");
+            System.out.println("6. Back");
+            System.out.print("Enter your choice: ");
+            String input = scanner.nextLine().trim();
+
+            int choice;
+            try {
+                choice = Integer.parseInt(input);
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid choice. Please enter a valid number.");
+                continue;
+            }
+
+            switch (choice) {
+                case 1:
+                    searchCandidateByName(scanner);
+                    break;
+                case 2:
+                    searchCandidateBySkill(scanner);
+                    break;
+                case 3:
+                    searchCandidateByEmail(scanner);
+                    break;
+                case 4:
+                    filterCandidateByMaxAge(scanner);
+                    break;
+                case 5:
+                    combinedCandidateSearch(scanner);
+                    break;
+                case 6:
+                    inSubMenu = false;
+                    break;
+                default:
+                    System.out.println("Invalid choice. Please select an option between 1 and 6.");
+                    break;
+            }
+        }
+    }
+
+    private static void searchCandidateByName(Scanner scanner) {
+        System.out.print("Enter Candidate Name: ");
+        String name = scanner.nextLine().trim();
+        if (name.isEmpty()) {
+            System.out.println("Candidate name cannot be empty.");
+            return;
+        }
+
+        ArrayList<Candidate> results = new ArrayList<>();
+        for (Candidate candidate : candidates) {
+            if (candidate.getName().toLowerCase().contains(name.toLowerCase())) {
+                results.add(candidate);
+            }
+        }
+        displayCandidateResults(results);
+    }
+
+    private static void searchCandidateBySkill(Scanner scanner) {
+        System.out.print("Enter Skill: ");
+        String skill = scanner.nextLine().trim();
+        if (skill.isEmpty()) {
+            System.out.println("Skill cannot be empty.");
+            return;
+        }
+
+        ArrayList<Candidate> results = new ArrayList<>();
+        for (Candidate candidate : candidates) {
+            if (candidate.getSkills().toLowerCase().contains(skill.toLowerCase())) {
+                results.add(candidate);
+            }
+        }
+        displayCandidateResults(results);
+    }
+
+    private static void searchCandidateByEmail(Scanner scanner) {
+        System.out.print("Enter Email: ");
+        String email = scanner.nextLine().trim();
+        if (email.isEmpty()) {
+            System.out.println("Email cannot be empty.");
+            return;
+        }
+
+        ArrayList<Candidate> results = new ArrayList<>();
+        for (Candidate candidate : candidates) {
+            if (candidate.getEmail().toLowerCase().contains(email.toLowerCase())) {
+                results.add(candidate);
+            }
+        }
+        displayCandidateResults(results);
+    }
+
+    private static void filterCandidateByMaxAge(Scanner scanner) {
+        System.out.print("Enter Maximum Age: ");
+        String ageStr = scanner.nextLine().trim();
+        int maxAge;
+        try {
+            maxAge = Integer.parseInt(ageStr);
+            if (maxAge <= 0) {
+                System.out.println("Invalid age.");
+                return;
+            }
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid age.");
+            return;
+        }
+
+        ArrayList<Candidate> results = new ArrayList<>();
+        for (Candidate candidate : candidates) {
+            if (candidate.getAge() <= maxAge) {
+                results.add(candidate);
+            }
+        }
+        displayCandidateResults(results);
+    }
+
+    private static void combinedCandidateSearch(Scanner scanner) {
+        System.out.println("\n===== COMBINED CANDIDATE SEARCH =====\n");
+        System.out.print("Enter Name (press Enter to skip): ");
+        String name = scanner.nextLine().trim();
+
+        System.out.print("Enter Skill (press Enter to skip): ");
+        String skill = scanner.nextLine().trim();
+
+        System.out.print("Enter Email (press Enter to skip): ");
+        String email = scanner.nextLine().trim();
+
+        System.out.print("Enter Maximum Age (press Enter to skip): ");
+        String ageStr = scanner.nextLine().trim();
+
+        boolean hasMaxAge = false;
+        int maxAge = 0;
+        if (!ageStr.isEmpty()) {
+            try {
+                maxAge = Integer.parseInt(ageStr);
+                if (maxAge <= 0) {
+                    System.out.println("Invalid age.");
+                    return;
+                }
+                hasMaxAge = true;
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid age.");
+                return;
+            }
+        }
+
+        ArrayList<Candidate> results = new ArrayList<>();
+        for (Candidate candidate : candidates) {
+            if (!name.isEmpty() && !candidate.getName().toLowerCase().contains(name.toLowerCase())) {
+                continue;
+            }
+            if (!skill.isEmpty() && !candidate.getSkills().toLowerCase().contains(skill.toLowerCase())) {
+                continue;
+            }
+            if (!email.isEmpty() && !candidate.getEmail().toLowerCase().contains(email.toLowerCase())) {
+                continue;
+            }
+            if (hasMaxAge && candidate.getAge() > maxAge) {
+                continue;
+            }
+            results.add(candidate);
+        }
+        displayCandidateResults(results);
+    }
+
+    private static void displayCandidateResults(ArrayList<Candidate> results) {
+        if (results.isEmpty()) {
+            System.out.println("No matching candidates found.");
+            return;
+        }
+
+        System.out.println("\n===== SEARCH RESULTS =====");
+        for (Candidate candidate : results) {
+            System.out.println();
+            candidate.displayDetails();
         }
     }
 
