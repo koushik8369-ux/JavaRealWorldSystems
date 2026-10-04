@@ -1,4 +1,5 @@
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Scanner;
 
@@ -9,6 +10,7 @@ public class JobRecruitmentManagementSystem {
     private static ArrayList<Job> jobs = new ArrayList<>();
     private static ArrayList<Candidate> candidates = new ArrayList<>();
     private static ArrayList<Application> applications = new ArrayList<>();
+    private static ArrayList<Interview> interviews = new ArrayList<>();
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
@@ -89,11 +91,32 @@ public class JobRecruitmentManagementSystem {
                     updateApplicationStatus(scanner);
                     break;
                 case 21:
+                    scheduleInterview(scanner);
+                    break;
+                case 22:
+                    displayAllInterviews();
+                    break;
+                case 23:
+                    searchInterviewById(scanner);
+                    break;
+                case 24:
+                    searchInterviewsByCandidate(scanner);
+                    break;
+                case 25:
+                    searchInterviewsByJob(scanner);
+                    break;
+                case 26:
+                    updateInterviewStatus(scanner);
+                    break;
+                case 27:
+                    recordInterviewResult(scanner);
+                    break;
+                case 28:
                     System.out.println("Thank you for using Job Recruitment Management System.");
                     running = false;
                     break;
                 default:
-                    System.out.println("Invalid choice. Please select an option between 1 and 21.");
+                    System.out.println("Invalid choice. Please select an option between 1 and 28.");
                     break;
             }
         }
@@ -123,7 +146,14 @@ public class JobRecruitmentManagementSystem {
         System.out.println("18. Search Applications by Job");
         System.out.println("19. Search Application by ID");
         System.out.println("20. Update Application Status");
-        System.out.println("21. Exit");
+        System.out.println("21. Schedule Interview");
+        System.out.println("22. Display All Interviews");
+        System.out.println("23. Search Interview by ID");
+        System.out.println("24. Search Interviews by Candidate");
+        System.out.println("25. Search Interviews by Job");
+        System.out.println("26. Update Interview Status");
+        System.out.println("27. Record Interview Result");
+        System.out.println("28. Exit");
     }
 
     private static void registerCompany(Scanner scanner) {
@@ -1113,6 +1143,318 @@ public class JobRecruitmentManagementSystem {
         for (Application application : applications) {
             if (application.getCandidateId() == candidateId && application.getJobId() == jobId) {
                 return application;
+            }
+        }
+        return null;
+    }
+
+    private static void scheduleInterview(Scanner scanner) {
+        System.out.println("\n===== SCHEDULE INTERVIEW =====");
+
+        System.out.print("Enter Interview ID: ");
+        String interviewIdStr = scanner.nextLine().trim();
+        int interviewId;
+        try {
+            interviewId = Integer.parseInt(interviewIdStr);
+            if (interviewId <= 0) {
+                System.out.println("Invalid Interview ID. Interview ID must be greater than 0.");
+                return;
+            }
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Interview ID. Please enter a valid number.");
+            return;
+        }
+
+        if (findInterviewById(interviewId) != null) {
+            System.out.println("Interview ID already exists.");
+            return;
+        }
+
+        System.out.print("Enter Application ID: ");
+        String applicationIdStr = scanner.nextLine().trim();
+        int applicationId;
+        try {
+            applicationId = Integer.parseInt(applicationIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Application ID. Please enter a valid number.");
+            return;
+        }
+
+        Application application = findApplicationById(applicationId);
+        if (application == null) {
+            System.out.println("Application not found.");
+            return;
+        }
+
+        if (!application.getStatus().equals("Shortlisted")) {
+            System.out.println("Only shortlisted candidates can be scheduled for an interview.");
+            return;
+        }
+
+        for (Interview interview : interviews) {
+            if (interview.getApplicationId() == applicationId && interview.getStatus().equals("Scheduled")) {
+                System.out.println("An interview is already scheduled for this application.");
+                return;
+            }
+        }
+
+        System.out.print("Enter Interview Date (YYYY-MM-DD): ");
+        String interviewDate = scanner.nextLine().trim();
+        try {
+            LocalDate.parse(interviewDate);
+        } catch (Exception e) {
+            System.out.println("Invalid interview date.");
+            return;
+        }
+
+        System.out.print("Enter Interview Time (HH:MM): ");
+        String interviewTime = scanner.nextLine().trim();
+        try {
+            LocalTime.parse(interviewTime);
+        } catch (Exception e) {
+            System.out.println("Invalid interview time.");
+            return;
+        }
+
+        System.out.println("Select Interview Mode:");
+        System.out.println("1. Online");
+        System.out.println("2. Offline");
+        System.out.println("3. Phone");
+        System.out.print("Enter choice: ");
+        String modeChoice = scanner.nextLine().trim();
+        String interviewMode;
+        switch (modeChoice) {
+            case "1":
+                interviewMode = "Online";
+                break;
+            case "2":
+                interviewMode = "Offline";
+                break;
+            case "3":
+                interviewMode = "Phone";
+                break;
+            default:
+                System.out.println("Invalid interview mode.");
+                return;
+        }
+
+        System.out.print("Enter Interviewer Name: ");
+        String interviewer = scanner.nextLine().trim();
+        if (interviewer.isEmpty()) {
+            System.out.println("Invalid interviewer name.");
+            return;
+        }
+
+        interviews.add(new Interview(interviewId, applicationId, interviewDate, interviewTime, interviewMode, interviewer, "Scheduled", "Pending"));
+        System.out.println("Interview scheduled successfully.");
+        Interview interview = findInterviewById(interviewId);
+        if (interview != null) {
+            interview.displayDetails();
+        }
+    }
+
+    private static void displayAllInterviews() {
+        if (interviews.isEmpty()) {
+            System.out.println("No interviews found.");
+            return;
+        }
+
+        System.out.println("\n===== INTERVIEW LIST =====");
+        for (Interview interview : interviews) {
+            System.out.println();
+            interview.displayDetails();
+        }
+    }
+
+    private static void searchInterviewById(Scanner scanner) {
+        System.out.print("Enter Interview ID: ");
+        String interviewIdStr = scanner.nextLine().trim();
+        int interviewId;
+        try {
+            interviewId = Integer.parseInt(interviewIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Interview ID. Please enter a valid number.");
+            return;
+        }
+
+        Interview interview = findInterviewById(interviewId);
+        if (interview == null) {
+            System.out.println("Interview not found.");
+            return;
+        }
+
+        System.out.println();
+        interview.displayDetails();
+    }
+
+    private static void searchInterviewsByCandidate(Scanner scanner) {
+        System.out.print("Enter Candidate ID: ");
+        String candidateIdStr = scanner.nextLine().trim();
+        int candidateId;
+        try {
+            candidateId = Integer.parseInt(candidateIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Candidate ID. Please enter a valid number.");
+            return;
+        }
+
+        Candidate candidate = findCandidateById(candidateId);
+        if (candidate == null) {
+            System.out.println("Candidate not found.");
+            return;
+        }
+
+        ArrayList<Interview> results = new ArrayList<>();
+        for (Interview interview : interviews) {
+            Application application = findApplicationById(interview.getApplicationId());
+            if (application != null && application.getCandidateId() == candidateId) {
+                results.add(interview);
+            }
+        }
+
+        if (results.isEmpty()) {
+            System.out.println("No interviews found for this candidate.");
+            return;
+        }
+
+        System.out.println("\n===== INTERVIEW SEARCH RESULTS =====");
+        for (Interview interview : results) {
+            System.out.println();
+            interview.displayDetails();
+        }
+    }
+
+    private static void searchInterviewsByJob(Scanner scanner) {
+        System.out.print("Enter Job ID: ");
+        String jobIdStr = scanner.nextLine().trim();
+        int jobId;
+        try {
+            jobId = Integer.parseInt(jobIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Job ID. Please enter a valid number.");
+            return;
+        }
+
+        Job job = findJobById(jobId);
+        if (job == null) {
+            System.out.println("Job not found.");
+            return;
+        }
+
+        ArrayList<Interview> results = new ArrayList<>();
+        for (Interview interview : interviews) {
+            Application application = findApplicationById(interview.getApplicationId());
+            if (application != null && application.getJobId() == jobId) {
+                results.add(interview);
+            }
+        }
+
+        if (results.isEmpty()) {
+            System.out.println("No interviews found for this job.");
+            return;
+        }
+
+        System.out.println("\n===== INTERVIEW SEARCH RESULTS =====");
+        for (Interview interview : results) {
+            System.out.println();
+            interview.displayDetails();
+        }
+    }
+
+    private static void updateInterviewStatus(Scanner scanner) {
+        System.out.print("Enter Interview ID: ");
+        String interviewIdStr = scanner.nextLine().trim();
+        int interviewId;
+        try {
+            interviewId = Integer.parseInt(interviewIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Interview ID. Please enter a valid number.");
+            return;
+        }
+
+        Interview interview = findInterviewById(interviewId);
+        if (interview == null) {
+            System.out.println("Interview not found.");
+            return;
+        }
+
+        System.out.println("\n===== UPDATE INTERVIEW STATUS =====");
+        System.out.println("Current Status: " + interview.getStatus());
+        System.out.println("1. Scheduled");
+        System.out.println("2. Completed");
+        System.out.println("3. Cancelled");
+        System.out.print("Enter choice: ");
+        String choice = scanner.nextLine().trim();
+
+        String newStatus;
+        switch (choice) {
+            case "1":
+                newStatus = "Scheduled";
+                break;
+            case "2":
+                newStatus = "Completed";
+                break;
+            case "3":
+                newStatus = "Cancelled";
+                break;
+            default:
+                System.out.println("Invalid status choice.");
+                return;
+        }
+
+        interview.setStatus(newStatus);
+        System.out.println("Interview status updated successfully.");
+    }
+
+    private static void recordInterviewResult(Scanner scanner) {
+        System.out.print("Enter Interview ID: ");
+        String interviewIdStr = scanner.nextLine().trim();
+        int interviewId;
+        try {
+            interviewId = Integer.parseInt(interviewIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Interview ID. Please enter a valid number.");
+            return;
+        }
+
+        Interview interview = findInterviewById(interviewId);
+        if (interview == null) {
+            System.out.println("Interview not found.");
+            return;
+        }
+
+        if (!interview.getStatus().equals("Completed")) {
+            System.out.println("Interview must be completed before recording the result.");
+            return;
+        }
+
+        System.out.println("\n===== RECORD INTERVIEW RESULT =====");
+        System.out.println("1. Passed");
+        System.out.println("2. Failed");
+        System.out.print("Enter choice: ");
+        String choice = scanner.nextLine().trim();
+
+        String result;
+        switch (choice) {
+            case "1":
+                result = "Passed";
+                break;
+            case "2":
+                result = "Failed";
+                break;
+            default:
+                System.out.println("Invalid result choice.");
+                return;
+        }
+
+        interview.setResult(result);
+        System.out.println("Interview result recorded successfully.");
+    }
+
+    private static Interview findInterviewById(int interviewId) {
+        for (Interview interview : interviews) {
+            if (interview.getInterviewId() == interviewId) {
+                return interview;
             }
         }
         return null;
