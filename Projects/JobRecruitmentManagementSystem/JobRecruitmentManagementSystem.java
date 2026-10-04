@@ -11,6 +11,7 @@ public class JobRecruitmentManagementSystem {
     private static ArrayList<Candidate> candidates = new ArrayList<>();
     private static ArrayList<Application> applications = new ArrayList<>();
     private static ArrayList<Interview> interviews = new ArrayList<>();
+    private static ArrayList<Offer> offers = new ArrayList<>();
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
@@ -112,11 +113,29 @@ public class JobRecruitmentManagementSystem {
                     recordInterviewResult(scanner);
                     break;
                 case 28:
+                    createJobOffer(scanner);
+                    break;
+                case 29:
+                    displayAllOffers();
+                    break;
+                case 30:
+                    searchOfferById(scanner);
+                    break;
+                case 31:
+                    searchOffersByCandidate(scanner);
+                    break;
+                case 32:
+                    searchOffersByJob(scanner);
+                    break;
+                case 33:
+                    updateOfferStatus(scanner);
+                    break;
+                case 34:
                     System.out.println("Thank you for using Job Recruitment Management System.");
                     running = false;
                     break;
                 default:
-                    System.out.println("Invalid choice. Please select an option between 1 and 28.");
+                    System.out.println("Invalid choice. Please select an option between 1 and 34.");
                     break;
             }
         }
@@ -153,7 +172,13 @@ public class JobRecruitmentManagementSystem {
         System.out.println("25. Search Interviews by Job");
         System.out.println("26. Update Interview Status");
         System.out.println("27. Record Interview Result");
-        System.out.println("28. Exit");
+        System.out.println("28. Create Job Offer");
+        System.out.println("29. Display All Offers");
+        System.out.println("30. Search Offer by ID");
+        System.out.println("31. Search Offers by Candidate");
+        System.out.println("32. Search Offers by Job");
+        System.out.println("33. Update Offer Status");
+        System.out.println("34. Exit");
     }
 
     private static void registerCompany(Scanner scanner) {
@@ -1449,6 +1474,286 @@ public class JobRecruitmentManagementSystem {
 
         interview.setResult(result);
         System.out.println("Interview result recorded successfully.");
+    }
+
+    private static void createJobOffer(Scanner scanner) {
+        System.out.println("\n===== CREATE JOB OFFER =====");
+
+        System.out.print("Enter Offer ID: ");
+        String offerIdStr = scanner.nextLine().trim();
+        int offerId;
+        try {
+            offerId = Integer.parseInt(offerIdStr);
+            if (offerId <= 0) {
+                System.out.println("Invalid Offer ID. Offer ID must be greater than 0.");
+                return;
+            }
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Offer ID. Please enter a valid number.");
+            return;
+        }
+
+        if (findOfferById(offerId) != null) {
+            System.out.println("Offer ID already exists.");
+            return;
+        }
+
+        System.out.print("Enter Application ID: ");
+        String applicationIdStr = scanner.nextLine().trim();
+        int applicationId;
+        try {
+            applicationId = Integer.parseInt(applicationIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Application ID. Please enter a valid number.");
+            return;
+        }
+
+        Application application = findApplicationById(applicationId);
+        if (application == null) {
+            System.out.println("Application not found.");
+            return;
+        }
+
+        Interview passedInterview = findInterviewForApplication(applicationId);
+        if (passedInterview == null || !passedInterview.getStatus().equals("Completed") || !passedInterview.getResult().equals("Passed")) {
+            System.out.println("Candidate must pass an interview before receiving an offer.");
+            return;
+        }
+
+        for (Offer offer : offers) {
+            if (offer.getApplicationId() == applicationId && (offer.getStatus().equals("Pending") || offer.getStatus().equals("Accepted"))) {
+                System.out.println("An active offer already exists for this application.");
+                return;
+            }
+        }
+
+        System.out.print("Enter Offered Salary: ");
+        String salaryStr = scanner.nextLine().trim();
+        double offeredSalary;
+        try {
+            offeredSalary = Double.parseDouble(salaryStr);
+            if (offeredSalary <= 0) {
+                System.out.println("Invalid salary.");
+                return;
+            }
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid salary.");
+            return;
+        }
+
+        System.out.print("Enter Joining Date (YYYY-MM-DD): ");
+        String joiningDate = scanner.nextLine().trim();
+        try {
+            LocalDate.parse(joiningDate);
+        } catch (Exception e) {
+            System.out.println("Invalid joining date.");
+            return;
+        }
+
+        String offerDate = LocalDate.now().toString();
+        offers.add(new Offer(offerId, applicationId, offeredSalary, offerDate, joiningDate, "Pending"));
+        System.out.println("Offer created successfully.");
+        Offer offer = findOfferById(offerId);
+        if (offer != null) {
+            offer.displayDetails();
+        }
+    }
+
+    private static void displayAllOffers() {
+        if (offers.isEmpty()) {
+            System.out.println("No offers found.");
+            return;
+        }
+
+        System.out.println("\n===== OFFER LIST =====");
+        for (Offer offer : offers) {
+            System.out.println();
+            offer.displayDetails();
+        }
+    }
+
+    private static void searchOfferById(Scanner scanner) {
+        System.out.print("Enter Offer ID: ");
+        String offerIdStr = scanner.nextLine().trim();
+        int offerId;
+        try {
+            offerId = Integer.parseInt(offerIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Offer ID. Please enter a valid number.");
+            return;
+        }
+
+        Offer offer = findOfferById(offerId);
+        if (offer == null) {
+            System.out.println("Offer not found.");
+            return;
+        }
+
+        System.out.println();
+        offer.displayDetails();
+    }
+
+    private static void searchOffersByCandidate(Scanner scanner) {
+        System.out.print("Enter Candidate ID: ");
+        String candidateIdStr = scanner.nextLine().trim();
+        int candidateId;
+        try {
+            candidateId = Integer.parseInt(candidateIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Candidate ID. Please enter a valid number.");
+            return;
+        }
+
+        Candidate candidate = findCandidateById(candidateId);
+        if (candidate == null) {
+            System.out.println("Candidate not found.");
+            return;
+        }
+
+        ArrayList<Offer> results = new ArrayList<>();
+        for (Offer offer : offers) {
+            Application application = findApplicationById(offer.getApplicationId());
+            if (application != null && application.getCandidateId() == candidateId) {
+                results.add(offer);
+            }
+        }
+
+        if (results.isEmpty()) {
+            System.out.println("No offers found for this candidate.");
+            return;
+        }
+
+        System.out.println("\n===== OFFER SEARCH RESULTS =====");
+        for (Offer offer : results) {
+            System.out.println();
+            offer.displayDetails();
+        }
+    }
+
+    private static void searchOffersByJob(Scanner scanner) {
+        System.out.print("Enter Job ID: ");
+        String jobIdStr = scanner.nextLine().trim();
+        int jobId;
+        try {
+            jobId = Integer.parseInt(jobIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Job ID. Please enter a valid number.");
+            return;
+        }
+
+        Job job = findJobById(jobId);
+        if (job == null) {
+            System.out.println("Job not found.");
+            return;
+        }
+
+        ArrayList<Offer> results = new ArrayList<>();
+        for (Offer offer : offers) {
+            Application application = findApplicationById(offer.getApplicationId());
+            if (application != null && application.getJobId() == jobId) {
+                results.add(offer);
+            }
+        }
+
+        if (results.isEmpty()) {
+            System.out.println("No offers found for this job.");
+            return;
+        }
+
+        System.out.println("\n===== OFFER SEARCH RESULTS =====");
+        for (Offer offer : results) {
+            System.out.println();
+            offer.displayDetails();
+        }
+    }
+
+    private static void updateOfferStatus(Scanner scanner) {
+        System.out.print("Enter Offer ID: ");
+        String offerIdStr = scanner.nextLine().trim();
+        int offerId;
+        try {
+            offerId = Integer.parseInt(offerIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Offer ID. Please enter a valid number.");
+            return;
+        }
+
+        Offer offer = findOfferById(offerId);
+        if (offer == null) {
+            System.out.println("Offer not found.");
+            return;
+        }
+
+        System.out.println("\n===== UPDATE OFFER STATUS =====");
+        System.out.println("Current Status: " + offer.getStatus());
+        System.out.println("1. Pending");
+        System.out.println("2. Accepted");
+        System.out.println("3. Rejected");
+        System.out.println("4. Withdrawn");
+        System.out.print("Enter choice: ");
+        String choice = scanner.nextLine().trim();
+
+        String newStatus;
+        switch (choice) {
+            case "1":
+                newStatus = "Pending";
+                break;
+            case "2":
+                newStatus = "Accepted";
+                break;
+            case "3":
+                newStatus = "Rejected";
+                break;
+            case "4":
+                newStatus = "Withdrawn";
+                break;
+            default:
+                System.out.println("Invalid status choice.");
+                return;
+        }
+
+        if (newStatus.equals("Accepted")) {
+            Application application = findApplicationById(offer.getApplicationId());
+            if (application != null) {
+                for (Offer existingOffer : offers) {
+                    if (existingOffer.getOfferId() != offer.getOfferId()
+                            && existingOffer.getApplicationId() == offer.getApplicationId()
+                            && existingOffer.getStatus().equals("Accepted")) {
+                        System.out.println("Candidate already has an accepted offer.");
+                        return;
+                    }
+                }
+            }
+        }
+
+        offer.setStatus(newStatus);
+        System.out.println("Offer status updated successfully.");
+
+        if (newStatus.equals("Accepted")) {
+            Application application = findApplicationById(offer.getApplicationId());
+            if (application != null) {
+                application.setStatus("Selected");
+                System.out.println("Application status updated to Selected.");
+            }
+        }
+    }
+
+    private static Offer findOfferById(int offerId) {
+        for (Offer offer : offers) {
+            if (offer.getOfferId() == offerId) {
+                return offer;
+            }
+        }
+        return null;
+    }
+
+    private static Interview findInterviewForApplication(int applicationId) {
+        for (Interview interview : interviews) {
+            if (interview.getApplicationId() == applicationId) {
+                return interview;
+            }
+        }
+        return null;
     }
 
     private static Interview findInterviewById(int interviewId) {
