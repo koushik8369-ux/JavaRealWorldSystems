@@ -1,3 +1,4 @@
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Scanner;
 
@@ -7,6 +8,7 @@ public class JobRecruitmentManagementSystem {
     private static ArrayList<Recruiter> recruiters = new ArrayList<>();
     private static ArrayList<Job> jobs = new ArrayList<>();
     private static ArrayList<Candidate> candidates = new ArrayList<>();
+    private static ArrayList<Application> applications = new ArrayList<>();
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
@@ -69,11 +71,29 @@ public class JobRecruitmentManagementSystem {
                     advancedCandidateSearchMenu(scanner);
                     break;
                 case 15:
+                    applyForJob(scanner);
+                    break;
+                case 16:
+                    displayAllApplications();
+                    break;
+                case 17:
+                    searchApplicationsByCandidate(scanner);
+                    break;
+                case 18:
+                    searchApplicationsByJob(scanner);
+                    break;
+                case 19:
+                    searchApplicationById(scanner);
+                    break;
+                case 20:
+                    updateApplicationStatus(scanner);
+                    break;
+                case 21:
                     System.out.println("Thank you for using Job Recruitment Management System.");
                     running = false;
                     break;
                 default:
-                    System.out.println("Invalid choice. Please select an option between 1 and 15.");
+                    System.out.println("Invalid choice. Please select an option between 1 and 21.");
                     break;
             }
         }
@@ -97,7 +117,13 @@ public class JobRecruitmentManagementSystem {
         System.out.println("12. Search Candidate by ID");
         System.out.println("13. Advanced Job Search");
         System.out.println("14. Advanced Candidate Search");
-        System.out.println("15. Exit");
+        System.out.println("15. Apply for Job");
+        System.out.println("16. Display All Applications");
+        System.out.println("17. Search Applications by Candidate");
+        System.out.println("18. Search Applications by Job");
+        System.out.println("19. Search Application by ID");
+        System.out.println("20. Update Application Status");
+        System.out.println("21. Exit");
     }
 
     private static void registerCompany(Scanner scanner) {
@@ -880,6 +906,216 @@ public class JobRecruitmentManagementSystem {
             System.out.println();
             candidate.displayDetails();
         }
+    }
+
+    private static void applyForJob(Scanner scanner) {
+        System.out.println("\n===== APPLY FOR JOB =====");
+        System.out.print("Enter Application ID: ");
+        String applicationIdStr = scanner.nextLine().trim();
+        int applicationId;
+        try {
+            applicationId = Integer.parseInt(applicationIdStr);
+            if (applicationId <= 0) {
+                System.out.println("Invalid Application ID. Application ID must be greater than 0.");
+                return;
+            }
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Application ID. Please enter a valid number.");
+            return;
+        }
+
+        if (findApplicationById(applicationId) != null) {
+            System.out.println("Application ID already exists.");
+            return;
+        }
+
+        System.out.print("Enter Candidate ID: ");
+        String candidateIdStr = scanner.nextLine().trim();
+        int candidateId;
+        try {
+            candidateId = Integer.parseInt(candidateIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Candidate ID. Please enter a valid number.");
+            return;
+        }
+
+        Candidate candidate = findCandidateById(candidateId);
+        if (candidate == null) {
+            System.out.println("Candidate not found.");
+            return;
+        }
+
+        System.out.print("Enter Job ID: ");
+        String jobIdStr = scanner.nextLine().trim();
+        int jobId;
+        try {
+            jobId = Integer.parseInt(jobIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Job ID. Please enter a valid number.");
+            return;
+        }
+
+        Job job = findJobById(jobId);
+        if (job == null) {
+            System.out.println("Job not found.");
+            return;
+        }
+
+        if (findApplicationByCandidateAndJob(candidateId, jobId) != null) {
+            System.out.println("You have already applied for this job.");
+            return;
+        }
+
+        applications.add(new Application(applicationId, candidateId, jobId, LocalDate.now().toString(), "Applied"));
+        System.out.println("Application submitted successfully.");
+    }
+
+    private static void displayAllApplications() {
+        if (applications.isEmpty()) {
+            System.out.println("No applications found.");
+            return;
+        }
+
+        System.out.println("\n===== APPLICATION LIST =====");
+        for (Application application : applications) {
+            System.out.println();
+            application.displayDetails();
+        }
+    }
+
+    private static void searchApplicationsByCandidate(Scanner scanner) {
+        System.out.print("Enter Candidate ID: ");
+        String candidateIdStr = scanner.nextLine().trim();
+        int candidateId;
+        try {
+            candidateId = Integer.parseInt(candidateIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Candidate ID. Please enter a valid number.");
+            return;
+        }
+
+        ArrayList<Application> results = new ArrayList<>();
+        for (Application application : applications) {
+            if (application.getCandidateId() == candidateId) {
+                results.add(application);
+            }
+        }
+
+        if (results.isEmpty()) {
+            System.out.println("No applications found for candidate ID: " + candidateId + ".");
+            return;
+        }
+
+        System.out.println("\n===== APPLICATION SEARCH RESULTS =====");
+        for (Application application : results) {
+            System.out.println();
+            application.displayDetails();
+        }
+    }
+
+    private static void searchApplicationsByJob(Scanner scanner) {
+        System.out.print("Enter Job ID: ");
+        String jobIdStr = scanner.nextLine().trim();
+        int jobId;
+        try {
+            jobId = Integer.parseInt(jobIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Job ID. Please enter a valid number.");
+            return;
+        }
+
+        ArrayList<Application> results = new ArrayList<>();
+        for (Application application : applications) {
+            if (application.getJobId() == jobId) {
+                results.add(application);
+            }
+        }
+
+        if (results.isEmpty()) {
+            System.out.println("No applications found for job ID: " + jobId + ".");
+            return;
+        }
+
+        System.out.println("\n===== APPLICATION SEARCH RESULTS =====");
+        for (Application application : results) {
+            System.out.println();
+            application.displayDetails();
+        }
+    }
+
+    private static void searchApplicationById(Scanner scanner) {
+        System.out.print("Enter Application ID: ");
+        String applicationIdStr = scanner.nextLine().trim();
+        int applicationId;
+        try {
+            applicationId = Integer.parseInt(applicationIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Application ID. Please enter a valid number.");
+            return;
+        }
+
+        Application application = findApplicationById(applicationId);
+        if (application == null) {
+            System.out.println("Application not found.");
+            return;
+        }
+
+        System.out.println();
+        application.displayDetails();
+    }
+
+    private static void updateApplicationStatus(Scanner scanner) {
+        System.out.print("Enter Application ID: ");
+        String applicationIdStr = scanner.nextLine().trim();
+        int applicationId;
+        try {
+            applicationId = Integer.parseInt(applicationIdStr);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid Application ID. Please enter a valid number.");
+            return;
+        }
+
+        Application application = findApplicationById(applicationId);
+        if (application == null) {
+            System.out.println("Application not found.");
+            return;
+        }
+
+        System.out.print("Enter new status: ");
+        String status = scanner.nextLine().trim();
+        if (!isValidApplicationStatus(status)) {
+            System.out.println("Invalid status. Allowed statuses: Applied, Under Review, Shortlisted, Rejected, Selected");
+            return;
+        }
+
+        application.setStatus(status);
+        System.out.println("Application status updated successfully.");
+    }
+
+    private static boolean isValidApplicationStatus(String status) {
+        return status != null && (status.equals("Applied")
+                || status.equals("Under Review")
+                || status.equals("Shortlisted")
+                || status.equals("Rejected")
+                || status.equals("Selected"));
+    }
+
+    private static Application findApplicationById(int applicationId) {
+        for (Application application : applications) {
+            if (application.getApplicationId() == applicationId) {
+                return application;
+            }
+        }
+        return null;
+    }
+
+    private static Application findApplicationByCandidateAndJob(int candidateId, int jobId) {
+        for (Application application : applications) {
+            if (application.getCandidateId() == candidateId && application.getJobId() == jobId) {
+                return application;
+            }
+        }
+        return null;
     }
 
     private static Company findCompanyById(int companyId) {
