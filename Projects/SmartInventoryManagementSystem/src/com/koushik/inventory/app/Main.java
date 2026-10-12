@@ -1,7 +1,7 @@
-
 package com.koushik.inventory.app;
 
 import com.koushik.inventory.model.Product;
+import com.koushik.inventory.model.Transaction;
 import com.koushik.inventory.service.InventoryService;
 
 import java.io.UncheckedIOException;
@@ -43,7 +43,10 @@ public class Main {
                     case 6 -> sortProducts(inventory);
                     case 7 -> showLowStock(inventory);
                     case 8 -> showInventoryValue(inventory);
-                    case 9, 0 -> {
+                    case 9 -> purchaseStock(inventory);
+                    case 10 -> sellStock(inventory);
+                    case 11 -> viewTransactionHistory(inventory);
+                    case 0 -> {
                         running = false;
                         System.out.println("Thank you for using Smart Inventory!");
                     }
@@ -73,7 +76,10 @@ public class Main {
                 6. Sort Products by Price
                 7. Low Stock Alerts
                 8. Total Inventory Value
-                9. Exit
+                9. Purchase Stock
+                10. Sell Stock
+                11. View Transaction History
+                0. Exit
                 ------------------------------
                 """);
     }
@@ -176,6 +182,105 @@ public class Main {
         System.out.printf(
                 "Total inventory value: Rs. %.2f%n",
                 inventory.getTotalInventoryValue());
+    }
+
+    private static void purchaseStock(InventoryService inventory) {
+        System.out.println("\n--- PURCHASE STOCK ---");
+
+        String id = readText("Enter product ID: ");
+        Optional<Product> result = inventory.findProductById(id);
+
+        if (result.isEmpty()) {
+            System.out.println("Error: Product not found.");
+            return;
+        }
+
+        Product product = result.get();
+        System.out.println("Product: " + product.getName());
+        System.out.println("Current Stock: " + product.getQuantity());
+        System.out.printf("Current Price: Rs. %.2f%n", product.getPrice());
+
+        int quantity = readInt("Enter purchase quantity: ");
+        if (quantity <= 0) {
+            System.out.println("Error: Purchase quantity must be positive.");
+            return;
+        }
+
+        try {
+            Transaction transaction = inventory.purchaseStock(id, quantity);
+            displayReceipt(transaction, product.getName());
+        } catch (IllegalArgumentException e) {
+            System.out.println("Purchase failed: " + e.getMessage());
+        }
+    }
+
+    private static void sellStock(InventoryService inventory) {
+        System.out.println("\n--- SELL STOCK ---");
+
+        String id = readText("Enter product ID: ");
+        Optional<Product> result = inventory.findProductById(id);
+
+        if (result.isEmpty()) {
+            System.out.println("Error: Product not found.");
+            return;
+        }
+
+        Product product = result.get();
+        System.out.println("Product: " + product.getName());
+        System.out.println("Current Stock: " + product.getQuantity());
+        System.out.printf("Current Price: Rs. %.2f%n", product.getPrice());
+
+        int quantity = readInt("Enter sale quantity: ");
+        if (quantity <= 0) {
+            System.out.println("Error: Sale quantity must be positive.");
+            return;
+        }
+        if (quantity > product.getQuantity()) {
+            System.out.println("Error: Sale quantity exceeds available stock (" + product.getQuantity() + ").");
+            return;
+        }
+
+        try {
+            Transaction transaction = inventory.sellStock(id, quantity);
+            displayReceipt(transaction, product.getName());
+        } catch (IllegalArgumentException e) {
+            System.out.println("Sale failed: " + e.getMessage());
+        }
+    }
+
+    private static void displayReceipt(Transaction transaction, String productName) {
+        System.out.println("\n==================================");
+        System.out.println("       TRANSACTION RECEIPT        ");
+        System.out.println("==================================");
+        System.out.println("Transaction ID  : " + transaction.getTransactionId());
+        System.out.println("Timestamp       : " + transaction.getTimestamp());
+        System.out.println("Product ID      : " + transaction.getProductId());
+        System.out.println("Product Name    : " + productName);
+        System.out.println("Transaction Type: " + transaction.getType());
+        System.out.println("Quantity        : " + transaction.getQuantity());
+        System.out.printf("Unit Price      : Rs. %.2f%n", transaction.getUnitPrice());
+        System.out.printf("Total Amount    : Rs. %.2f%n", transaction.getTotalAmount().doubleValue());
+        System.out.println("==================================");
+    }
+
+    private static void viewTransactionHistory(InventoryService inventory) {
+        List<Transaction> transactions = inventory.getTransactionHistory();
+        if (transactions.isEmpty()) {
+            System.out.println("No transactions found.");
+            return;
+        }
+
+        System.out.println("\n--- TRANSACTION HISTORY ---");
+        for (Transaction txn : transactions) {
+            System.out.println("Transaction ID  : " + txn.getTransactionId());
+            System.out.println("Timestamp       : " + txn.getTimestamp());
+            System.out.println("Product ID      : " + txn.getProductId());
+            System.out.println("Transaction Type: " + txn.getType());
+            System.out.println("Quantity        : " + txn.getQuantity());
+            System.out.printf("Unit Price      : Rs. %.2f%n", txn.getUnitPrice());
+            System.out.printf("Total Amount    : Rs. %.2f%n", txn.getTotalAmount().doubleValue());
+            System.out.println("------------------------------");
+        }
     }
 
     private static String readText(String prompt) {
