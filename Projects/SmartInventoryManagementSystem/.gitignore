@@ -1,0 +1,8 @@
+@'
+out/
+*.class
+.vscode/
+.idea/
+data/products.txt
+data/transactions.txt
+'@ | Set-Content .gitignore
