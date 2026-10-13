@@ -67,6 +67,19 @@ public class Product {
     }
 
     @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Product product = (Product) o;
+        return productId.equalsIgnoreCase(product.productId);
+    }
+
+    @Override
+    public int hashCode() {
+        return productId.toLowerCase().hashCode();
+    }
+
+    @Override
     public String toString() {
         return "Product ID: " + productId
                 + "\nName: " + name

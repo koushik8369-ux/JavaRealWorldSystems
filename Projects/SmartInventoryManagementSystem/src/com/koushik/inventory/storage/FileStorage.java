@@ -217,6 +217,20 @@ public class FileStorage {
         }
     }
 
+    /**
+     * Persists products and transactions sequentially with best-effort rollback recovery.
+     *
+     * <p><strong>Atomicity Note:</strong> Individual file replacements use temporary files
+     * and atomic moves where supported by the operating system and filesystem. However,
+     * because products and transactions are stored in separate files, true cross-file
+     * ACID atomicity is not guaranteed without a transactional filesystem or unified journal.
+     * If product replacement fails, a best-effort rollback restores the transaction file to
+     * its prior content.</p>
+     *
+     * @param products products to persist
+     * @param transactions transactions to persist
+     * @throws IOException if persisting fails
+     */
     public void saveAll(List<Product> products, List<Transaction> transactions) throws IOException {
         if (products == null) {
             throw new IllegalArgumentException("Products cannot be null.");
@@ -245,10 +259,13 @@ public class FileStorage {
                 ? Files.readAllBytes(absTransaction)
                 : null;
 
-        Path tempProduct = Files.createTempFile(productParent, "products-", ".tmp");
-        Path tempTransaction = Files.createTempFile(transactionParent, "transactions-", ".tmp");
+        Path tempProduct = null;
+        Path tempTransaction = null;
 
         try {
+            tempProduct = Files.createTempFile(productParent, "products-", ".tmp");
+            tempTransaction = Files.createTempFile(transactionParent, "transactions-", ".tmp");
+
             Files.writeString(tempProduct, productContents, StandardCharsets.UTF_8);
             Files.writeString(tempTransaction, transactionContents, StandardCharsets.UTF_8);
 
@@ -277,8 +294,12 @@ public class FileStorage {
                 throw productMoveError;
             }
         } finally {
-            Files.deleteIfExists(tempProduct);
-            Files.deleteIfExists(tempTransaction);
+            if (tempProduct != null) {
+                Files.deleteIfExists(tempProduct);
+            }
+            if (tempTransaction != null) {
+                Files.deleteIfExists(tempTransaction);
+            }
         }
     }
 

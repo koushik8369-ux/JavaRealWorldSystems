@@ -14,9 +14,10 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -72,6 +73,9 @@ public class InventoryService {
 
     public void updateProduct(String productId, String name, String category,
                               double price, int quantity, int lowStockThreshold) {
+        if (productId == null || productId.isBlank()) {
+            throw new IllegalArgumentException("Product ID is required.");
+        }
         int productIndex = findProductIndex(productId);
         if (productIndex < 0) {
             throw new IllegalArgumentException("Product not found.");
@@ -91,7 +95,7 @@ public class InventoryService {
     }
 
     public Optional<Product> findProductById(String productId) {
-        if (productId == null) {
+        if (productId == null || productId.isBlank()) {
             return Optional.empty();
         }
         return products.stream()
@@ -100,9 +104,12 @@ public class InventoryService {
     }
 
     public boolean deleteProduct(String productId) {
+        if (productId == null || productId.isBlank()) {
+            return false;
+        }
         List<Product> updatedProducts = new ArrayList<>(products);
         boolean removed = updatedProducts.removeIf(
-                p -> p.getProductId().equalsIgnoreCase(productId));
+                p -> p.getProductId().equalsIgnoreCase(productId.trim()));
         if (removed) {
             persist(updatedProducts);
             products.clear();
@@ -262,7 +269,7 @@ public class InventoryService {
     }
 
     public Optional<Transaction> findTransactionById(String transactionId) {
-        if (transactionId == null) {
+        if (transactionId == null || transactionId.isBlank()) {
             return Optional.empty();
         }
         return transactions.stream()
@@ -319,7 +326,13 @@ public class InventoryService {
 
     private synchronized String generateTransactionId() {
         while (true) {
-            String candidate = String.format("TXN-%05d", nextTransactionNumber++);
+            if (nextTransactionNumber < 1) {
+                nextTransactionNumber = 1;
+            }
+            String candidate = String.format("TXN-%05d", nextTransactionNumber);
+            if (nextTransactionNumber < Long.MAX_VALUE) {
+                nextTransactionNumber++;
+            }
             if (findTransactionById(candidate).isEmpty()) {
                 return candidate;
             }
@@ -463,8 +476,16 @@ public class InventoryService {
             ));
         }
 
-        Files.writeString(absoluteTarget, csv.toString(), StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+        Path tempFile = null;
+        try {
+            tempFile = Files.createTempFile(parent, "inventory-export-", ".tmp");
+            Files.writeString(tempFile, csv.toString(), StandardCharsets.UTF_8);
+            moveAtomicOrReplace(tempFile, absoluteTarget);
+        } finally {
+            if (tempFile != null) {
+                Files.deleteIfExists(tempFile);
+            }
+        }
 
         return targetPath;
     }
@@ -505,8 +526,16 @@ public class InventoryService {
             ));
         }
 
-        Files.writeString(absoluteTarget, csv.toString(), StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+        Path tempFile = null;
+        try {
+            tempFile = Files.createTempFile(parent, "transactions-export-", ".tmp");
+            Files.writeString(tempFile, csv.toString(), StandardCharsets.UTF_8);
+            moveAtomicOrReplace(tempFile, absoluteTarget);
+        } finally {
+            if (tempFile != null) {
+                Files.deleteIfExists(tempFile);
+            }
+        }
 
         return targetPath;
     }
@@ -514,6 +543,9 @@ public class InventoryService {
     private void validateExportPath(Path targetPath) {
         if (targetPath == null) {
             throw new IllegalArgumentException("Export target path is required.");
+        }
+        if (targetPath.toString().isBlank()) {
+            throw new IllegalArgumentException("Export target path cannot be blank.");
         }
 
         Path absoluteTarget = targetPath.toAbsolutePath().normalize();
@@ -523,7 +555,13 @@ public class InventoryService {
                     "Export target path must be a file, not an existing directory: " + targetPath);
         }
 
-        String fileName = absoluteTarget.getFileName().toString();
+        Path fileNamePath = absoluteTarget.getFileName();
+        if (fileNamePath == null) {
+            throw new IllegalArgumentException(
+                    "Export target path must include a file name: " + targetPath);
+        }
+
+        String fileName = fileNamePath.toString();
         if (fileName.equalsIgnoreCase("products.txt") || fileName.equalsIgnoreCase("transactions.txt")) {
             throw new IllegalArgumentException(
                     "Export target cannot overwrite storage file: " + targetPath);
@@ -532,18 +570,39 @@ public class InventoryService {
         if (storage != null) {
             if (storage.getFile() != null) {
                 Path storagePath = storage.getFile().toAbsolutePath().normalize();
-                if (absoluteTarget.equals(storagePath)) {
+                if (absoluteTarget.equals(storagePath) || isSameFileSafe(absoluteTarget, storagePath)) {
                     throw new IllegalArgumentException(
                         "Export target cannot overwrite product storage file: " + targetPath);
                 }
             }
             if (storage.getTransactionFile() != null) {
                 Path txnPath = storage.getTransactionFile().toAbsolutePath().normalize();
-                if (absoluteTarget.equals(txnPath)) {
+                if (absoluteTarget.equals(txnPath) || isSameFileSafe(absoluteTarget, txnPath)) {
                     throw new IllegalArgumentException(
                         "Export target cannot overwrite transaction storage file: " + targetPath);
                 }
             }
         }
+    }
+
+    private static void moveAtomicOrReplace(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(source, target,
+                    StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private static boolean isSameFileSafe(Path path1, Path path2) {
+        if (Files.exists(path1) && Files.exists(path2)) {
+            try {
+                return Files.isSameFile(path1, path2);
+            } catch (IOException ignored) {
+            }
+        }
+        return false;
     }
 }

@@ -46,6 +46,7 @@ public final class InventoryReportsTest {
         testCsvHeadersAndContent(baseDir.resolve("csv-headers-test"));
         testCsvEscapingRfc4180(baseDir.resolve("csv-escaping-test"));
         testExportErrorsAndStorageProtection(baseDir.resolve("export-errors-test"));
+        InventoryValidationReliabilityTest.runAll(baseDir.resolve("phase6-reliability-test"));
     }
 
     private static void testEmptyInventoryAndTransactions(Path dir) throws IOException {

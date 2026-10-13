@@ -37,7 +37,10 @@ public final class InventoryPersistenceTest {
             // Phase 5: Inventory Reports, Dashboard, and Analytics
             InventoryReportsTest.runAll(testDirectory.resolve("phase5-reports-test"));
 
-            System.out.println("All 14 persistence requirements and all Phase 5 report requirements passed successfully!");
+            // Phase 6: Validation and Reliability
+            InventoryValidationReliabilityTest.runAll(testDirectory.resolve("phase6-reliability-test"));
+
+            System.out.println("All persistence, report, and reliability requirements passed successfully!");
         } finally {
             deleteTree(testDirectory);
         }

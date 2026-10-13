@@ -81,6 +81,9 @@ public final class CsvUtil {
      * @return 2-decimal plain string representation
      */
     public static String formatMonetary(double amount) {
+        if (!Double.isFinite(amount)) {
+            return "0.00";
+        }
         return formatMonetary(BigDecimal.valueOf(amount));
     }
 }

@@ -32,44 +32,48 @@ public class Main {
         System.out.println("  SMART INVENTORY MANAGEMENT");
         System.out.println("==================================");
 
-        while (running) {
-            displayMenu();
+        try {
+            while (running) {
+                displayMenu();
 
-            int choice = readInt("Enter your choice: ");
+                int choice = readInt("Enter your choice: ");
 
-            try {
-                switch (choice) {
-                    case 1 -> addProduct(inventory);
-                    case 2 -> viewProducts(inventory.getAllProducts());
-                    case 3 -> searchProduct(inventory);
-                    case 4 -> updateProduct(inventory);
-                    case 5 -> deleteProduct(inventory);
-                    case 6 -> sortProducts(inventory);
-                    case 7 -> showLowStock(inventory);
-                    case 8 -> showInventoryValue(inventory);
-                    case 9 -> purchaseStock(inventory);
-                    case 10 -> sellStock(inventory);
-                    case 11 -> viewTransactionHistory(inventory);
-                    case 12 -> showDashboard(inventory);
-                    case 13 -> showSalesReport(inventory);
-                    case 14 -> exportInventoryCsv(inventory);
-                    case 15 -> exportTransactionsCsv(inventory);
-                    case 0 -> {
-                        running = false;
-                        System.out.println("Thank you for using Smart Inventory!");
+                try {
+                    switch (choice) {
+                        case 1 -> addProduct(inventory);
+                        case 2 -> viewProducts(inventory.getAllProducts());
+                        case 3 -> searchProduct(inventory);
+                        case 4 -> updateProduct(inventory);
+                        case 5 -> deleteProduct(inventory);
+                        case 6 -> sortProducts(inventory);
+                        case 7 -> showLowStock(inventory);
+                        case 8 -> showInventoryValue(inventory);
+                        case 9 -> purchaseStock(inventory);
+                        case 10 -> sellStock(inventory);
+                        case 11 -> viewTransactionHistory(inventory);
+                        case 12 -> showDashboard(inventory);
+                        case 13 -> showSalesReport(inventory);
+                        case 14 -> exportInventoryCsv(inventory);
+                        case 15 -> exportTransactionsCsv(inventory);
+                        case 0 -> {
+                            running = false;
+                            System.out.println("Thank you for using Smart Inventory!");
+                        }
+                        default -> System.out.println("Invalid choice. Try again.");
                     }
-                    default -> System.out.println("Invalid choice. Try again.");
+                } catch (IllegalArgumentException e) {
+                    System.out.println("Error: " + e.getMessage());
+                } catch (UncheckedIOException e) {
+                    System.out.println("Storage error: " + e.getMessage());
                 }
-            } catch (IllegalArgumentException e) {
-                System.out.println("Error: " + e.getMessage());
-            } catch (UncheckedIOException e) {
-                System.out.println("Storage error: " + e.getMessage());
+
+                System.out.println();
             }
-
-            System.out.println();
+        } catch (IllegalStateException e) {
+            System.out.println("\nSession ended: " + e.getMessage());
+        } finally {
+            SCANNER.close();
         }
-
-        SCANNER.close();
     }
 
     private static void displayMenu() {
@@ -298,6 +302,9 @@ public class Main {
     private static String readText(String prompt) {
         while (true) {
             System.out.print(prompt);
+            if (!SCANNER.hasNextLine()) {
+                throw new IllegalStateException("Input stream has ended.");
+            }
             String value = SCANNER.nextLine().trim();
 
             if (!value.isEmpty()) {
@@ -311,6 +318,9 @@ public class Main {
     private static int readInt(String prompt) {
         while (true) {
             System.out.print(prompt);
+            if (!SCANNER.hasNextLine()) {
+                throw new IllegalStateException("Input stream has ended.");
+            }
 
             try {
                 return Integer.parseInt(SCANNER.nextLine().trim());
@@ -323,6 +333,9 @@ public class Main {
     private static double readDouble(String prompt) {
         while (true) {
             System.out.print(prompt);
+            if (!SCANNER.hasNextLine()) {
+                throw new IllegalStateException("Input stream has ended.");
+            }
 
             try {
                 double value = Double.parseDouble(
@@ -352,6 +365,9 @@ public class Main {
     private static void exportInventoryCsv(InventoryService inventory) {
         System.out.println("\n--- EXPORT INVENTORY TO CSV ---");
         System.out.print("Enter file name or path (press Enter for default 'reports/inventory.csv'): ");
+        if (!SCANNER.hasNextLine()) {
+            throw new IllegalStateException("Input stream has ended.");
+        }
         String input = SCANNER.nextLine().trim();
         Path path;
         if (input.isEmpty()) {
@@ -376,6 +392,9 @@ public class Main {
     private static void exportTransactionsCsv(InventoryService inventory) {
         System.out.println("\n--- EXPORT TRANSACTIONS TO CSV ---");
         System.out.print("Enter file name or path (press Enter for default 'reports/transactions.csv'): ");
+        if (!SCANNER.hasNextLine()) {
+            throw new IllegalStateException("Input stream has ended.");
+        }
         String input = SCANNER.nextLine().trim();
         Path path;
         if (input.isEmpty()) {

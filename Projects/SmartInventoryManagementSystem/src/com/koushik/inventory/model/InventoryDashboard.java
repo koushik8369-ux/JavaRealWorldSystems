@@ -28,6 +28,9 @@ public class InventoryDashboard {
         if (lowStockProductsCount < 0) {
             throw new IllegalArgumentException("Low-stock products count cannot be negative.");
         }
+        if (lowStockProductsCount > totalProducts) {
+            throw new IllegalArgumentException("Low-stock products count cannot exceed total products.");
+        }
 
         this.totalProducts = totalProducts;
         this.totalStockQuantity = totalStockQuantity;
