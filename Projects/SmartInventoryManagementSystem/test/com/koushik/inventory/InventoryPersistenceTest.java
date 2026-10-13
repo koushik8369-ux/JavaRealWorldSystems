@@ -34,7 +34,10 @@ public final class InventoryPersistenceTest {
             testMalformedRecords(testDirectory.resolve("malformed-products.txt"));
             testMalformedTransactionRecords(testDirectory.resolve("malformed-tx.txt"));
 
-            System.out.println("All 14 test requirements passed successfully!");
+            // Phase 5: Inventory Reports, Dashboard, and Analytics
+            InventoryReportsTest.runAll(testDirectory.resolve("phase5-reports-test"));
+
+            System.out.println("All 14 persistence requirements and all Phase 5 report requirements passed successfully!");
         } finally {
             deleteTree(testDirectory);
         }

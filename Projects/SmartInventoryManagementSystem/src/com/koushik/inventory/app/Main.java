@@ -1,10 +1,14 @@
 package com.koushik.inventory.app;
 
+import com.koushik.inventory.model.InventoryDashboard;
 import com.koushik.inventory.model.Product;
+import com.koushik.inventory.model.SalesAndPurchaseReport;
 import com.koushik.inventory.model.Transaction;
 import com.koushik.inventory.service.InventoryService;
 
+import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.Scanner;
@@ -46,6 +50,10 @@ public class Main {
                     case 9 -> purchaseStock(inventory);
                     case 10 -> sellStock(inventory);
                     case 11 -> viewTransactionHistory(inventory);
+                    case 12 -> showDashboard(inventory);
+                    case 13 -> showSalesReport(inventory);
+                    case 14 -> exportInventoryCsv(inventory);
+                    case 15 -> exportTransactionsCsv(inventory);
                     case 0 -> {
                         running = false;
                         System.out.println("Thank you for using Smart Inventory!");
@@ -79,6 +87,10 @@ public class Main {
                 9. Purchase Stock
                 10. Sell Stock
                 11. View Transaction History
+                12. Inventory Dashboard
+                13. Sales and Purchase Reports
+                14. Export Inventory to CSV
+                15. Export Transactions to CSV
                 0. Exit
                 ------------------------------
                 """);
@@ -324,6 +336,64 @@ public class Main {
             }
 
             System.out.println("Enter a valid positive price.");
+        }
+    }
+
+    private static void showDashboard(InventoryService inventory) {
+        InventoryDashboard dashboard = inventory.getInventoryDashboard();
+        System.out.println(dashboard);
+    }
+
+    private static void showSalesReport(InventoryService inventory) {
+        SalesAndPurchaseReport report = inventory.getSalesAndPurchaseReport();
+        System.out.println(report);
+    }
+
+    private static void exportInventoryCsv(InventoryService inventory) {
+        System.out.println("\n--- EXPORT INVENTORY TO CSV ---");
+        System.out.print("Enter file name or path (press Enter for default 'reports/inventory.csv'): ");
+        String input = SCANNER.nextLine().trim();
+        Path path;
+        if (input.isEmpty()) {
+            path = Path.of("reports", "inventory.csv");
+        } else {
+            path = Path.of(input);
+            if (path.getParent() == null) {
+                path = Path.of("reports").resolve(path);
+            }
+        }
+
+        try {
+            Path exported = inventory.exportInventoryCsv(path);
+            System.out.println("Inventory exported successfully to: " + exported);
+        } catch (IllegalArgumentException e) {
+            System.out.println("Error: " + e.getMessage());
+        } catch (IOException e) {
+            System.out.println("Export failed: " + e.getMessage());
+        }
+    }
+
+    private static void exportTransactionsCsv(InventoryService inventory) {
+        System.out.println("\n--- EXPORT TRANSACTIONS TO CSV ---");
+        System.out.print("Enter file name or path (press Enter for default 'reports/transactions.csv'): ");
+        String input = SCANNER.nextLine().trim();
+        Path path;
+        if (input.isEmpty()) {
+            path = Path.of("reports", "transactions.csv");
+        } else {
+            path = Path.of(input);
+            if (path.getParent() == null) {
+                path = Path.of("reports").resolve(path);
+            }
+        }
+
+        try {
+            Path exported = inventory.exportTransactionsCsv(path);
+            System.out.println("Transactions exported successfully to: " + exported);
+        } catch (IllegalArgumentException e) {
+            System.out.println("Error: " + e.getMessage());
+        } catch (IOException e) {
+            System.out.println("Export failed: " + e.getMessage());
         }
     }
 }

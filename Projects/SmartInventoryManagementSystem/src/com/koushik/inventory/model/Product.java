@@ -28,31 +28,31 @@ public class Product {
     public int getQuantity() { return quantity; }
     public int getLowStockThreshold() { return lowStockThreshold; }
 
-    public void setName(String name) {
+    public final void setName(String name) {
         if (name == null || name.isBlank())
             throw new IllegalArgumentException("Name is required.");
         this.name = name.trim();
     }
 
-    public void setCategory(String category) {
+    public final void setCategory(String category) {
         if (category == null || category.isBlank())
             throw new IllegalArgumentException("Category is required.");
         this.category = category.trim();
     }
 
-    public void setPrice(double price) {
+    public final void setPrice(double price) {
         if (!Double.isFinite(price) || price <= 0)
             throw new IllegalArgumentException("Price must be positive.");
         this.price = price;
     }
 
-    public void setQuantity(int quantity) {
+    public final void setQuantity(int quantity) {
         if (quantity < 0)
             throw new IllegalArgumentException("Quantity cannot be negative.");
         this.quantity = quantity;
     }
 
-    public void setLowStockThreshold(int threshold) {
+    public final void setLowStockThreshold(int threshold) {
         if (threshold < 0)
             throw new IllegalArgumentException("Threshold cannot be negative.");
         this.lowStockThreshold = threshold;
