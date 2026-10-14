@@ -2,6 +2,7 @@
 package com.koushik.waste;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 public class CollectionOperationsService {
@@ -150,5 +151,13 @@ public class CollectionOperationsService {
 
     public int getVehicleCount() {
         return vehicles.size();
+    }
+
+    public List<CollectionTask> getAllTasks() {
+        return List.copyOf(tasks.values());
+    }
+
+    public List<CollectionVehicle> getAllVehicles() {
+        return List.copyOf(vehicles.values());
     }
 }
