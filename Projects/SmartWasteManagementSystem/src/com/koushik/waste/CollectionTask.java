@@ -1,3 +1,4 @@
+
 package com.koushik.waste;
 
 public class CollectionTask {
@@ -27,6 +28,26 @@ public class CollectionTask {
         this.status = Status.PENDING;
     }
 
+    /**
+     * Restores a task without performing collection operations.
+     * This prevents a previously completed task from emptying
+     * its bin again during restoration.
+     */
+    public static CollectionTask restore(
+            String taskId,
+            WasteBin wasteBin,
+            Status restoredStatus) {
+
+        if (restoredStatus == null) {
+            throw new IllegalArgumentException(
+                    "Restored task status cannot be null.");
+        }
+
+        CollectionTask task = new CollectionTask(taskId, wasteBin);
+        task.status = restoredStatus;
+        return task;
+    }
+
     public String getTaskId() {
         return taskId;
     }
@@ -44,6 +65,7 @@ public class CollectionTask {
             throw new IllegalStateException(
                     "Only pending tasks can be started.");
         }
+
         status = Status.IN_PROGRESS;
     }
 

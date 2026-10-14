@@ -27,6 +27,15 @@ public class CollectionOperationsService {
                     "Duplicate vehicle ID: " + vehicle.getVehicleId());
         }
 
+        for (CollectionVehicle existing : vehicles.values()) {
+            if (existing.getRegistrationNumber().equals(
+                    vehicle.getRegistrationNumber())) {
+                throw new IllegalArgumentException(
+                        "Duplicate vehicle registration: "
+                                + vehicle.getRegistrationNumber());
+            }
+        }
+
         vehicles.put(vehicle.getVehicleId(), vehicle);
     }
 
@@ -87,6 +96,92 @@ public class CollectionOperationsService {
             tasks.remove(taskId);
             assignedVehicles.remove(taskId);
             vehicle.releaseVehicle();
+            throw exception;
+        }
+
+        return task;
+    }
+
+    /**
+     * Restores a previously saved task and its vehicle assignment.
+     * The bin and vehicle must already be registered.
+     */
+    public CollectionTask restoreTask(
+            String taskId,
+            WasteBin bin,
+            String vehicleId,
+            CollectionTask.Status status) {
+
+        if (taskId == null || taskId.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Task ID cannot be empty.");
+        }
+
+        if (bin == null) {
+            throw new IllegalArgumentException(
+                    "Waste bin cannot be null.");
+        }
+
+        if (status == null) {
+            throw new IllegalArgumentException(
+                    "Task status cannot be null.");
+        }
+
+        if (tasks.containsKey(taskId)) {
+            throw new IllegalArgumentException(
+                    "Duplicate task ID: " + taskId);
+        }
+
+        CollectionVehicle vehicle = null;
+
+        if (status == CollectionTask.Status.IN_PROGRESS) {
+            if (vehicleId == null || vehicleId.isBlank()) {
+                throw new IllegalArgumentException(
+                        "In-progress task requires a vehicle.");
+            }
+
+            vehicle = vehicles.get(vehicleId);
+
+            if (vehicle == null) {
+                throw new IllegalArgumentException(
+                        "Vehicle not found: " + vehicleId);
+            }
+
+            if (!vehicle.isAvailable()) {
+                throw new IllegalStateException(
+                        "Vehicle is already assigned.");
+            }
+
+            if (bin.getCurrentWasteKg() > vehicle.getCapacityKg()) {
+                throw new IllegalStateException(
+                        "Vehicle capacity is insufficient.");
+            }
+        } else if (vehicleId != null && !vehicleId.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Only in-progress tasks can have a vehicle assignment.");
+        }
+
+        CollectionTask task =
+                CollectionTask.restore(taskId, bin, status);
+
+        if (vehicle != null) {
+            vehicle.assignVehicle();
+        }
+
+        try {
+            tasks.put(taskId, task);
+
+            if (vehicle != null) {
+                assignedVehicles.put(taskId, vehicle);
+            }
+        } catch (RuntimeException exception) {
+            tasks.remove(taskId);
+            assignedVehicles.remove(taskId);
+
+            if (vehicle != null && !vehicle.isAvailable()) {
+                vehicle.releaseVehicle();
+            }
+
             throw exception;
         }
 
