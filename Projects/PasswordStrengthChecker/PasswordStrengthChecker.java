@@ -1,4 +1,11 @@
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
 
@@ -18,6 +25,11 @@ public class PasswordStrengthChecker {
         "qwerty", "admin", "letmein", "welcome",
         "iloveyou", "abc123", "passw0rd", "12345678"
     );
+
+    // Store only analysis results, never the actual passwords.
+    private static final List<String> HISTORY = new ArrayList<>();
+
+    private static String lastReport = "No report generated yet.";
 
     private static boolean containsUpper(String s) {
         return s.matches(".*[A-Z].*");
@@ -61,28 +73,68 @@ public class PasswordStrengthChecker {
         return false;
     }
 
-    private static String analyzePassword(String password) {
-        String normalized = password.toLowerCase();
-
-        if (COMMON_PASSWORDS.contains(normalized)) {
-            return "WEAK - Common password";
-        }
-
+    private static int calculateScore(String password) {
         int score = 0;
 
-        if (password.length() >= 8) score++;
-        if (password.length() >= 12) score++;
-        if (containsUpper(password)) score++;
-        if (containsLower(password)) score++;
-        if (containsDigit(password)) score++;
-        if (containsSymbol(password)) score++;
+        if (password.length() >= 8) score += 20;
+        if (password.length() >= 12) score += 15;
+        if (password.length() >= 16) score += 10;
+        if (containsUpper(password)) score += 15;
+        if (containsLower(password)) score += 10;
+        if (containsDigit(password)) score += 15;
+        if (containsSymbol(password)) score += 15;
 
-        if (hasRepeatedCharacters(password)) score--;
-        if (hasSequentialPattern(password)) score--;
+        if (hasRepeatedCharacters(password)) score -= 10;
+        if (hasSequentialPattern(password)) score -= 15;
+        if (COMMON_PASSWORDS.contains(password.toLowerCase())) {
+            score = 0;
+        }
 
-        if (score <= 2) return "WEAK";
-        if (score <= 4) return "MEDIUM";
+        return Math.max(0, Math.min(100, score));
+    }
+
+    private static String getStrength(String password, int score) {
+        if (COMMON_PASSWORDS.contains(password.toLowerCase())) {
+            return "WEAK - Common password";
+        }
+        if (score < 40) return "WEAK";
+        if (score < 70) return "MEDIUM";
         return "STRONG";
+    }
+
+    private static List<String> getSuggestions(String password) {
+        List<String> suggestions = new ArrayList<>();
+
+        if (password.length() < 12) {
+            suggestions.add("Use at least 12 characters.");
+        }
+        if (!containsUpper(password)) {
+            suggestions.add("Add uppercase letters.");
+        }
+        if (!containsLower(password)) {
+            suggestions.add("Add lowercase letters.");
+        }
+        if (!containsDigit(password)) {
+            suggestions.add("Add numbers.");
+        }
+        if (!containsSymbol(password)) {
+            suggestions.add("Add special characters.");
+        }
+        if (COMMON_PASSWORDS.contains(password.toLowerCase())) {
+            suggestions.add("Avoid common passwords; choose a unique passphrase.");
+        }
+        if (hasRepeatedCharacters(password)) {
+            suggestions.add("Avoid repeated adjacent characters.");
+        }
+        if (hasSequentialPattern(password)) {
+            suggestions.add("Avoid predictable sequences.");
+        }
+
+        if (suggestions.isEmpty()) {
+            suggestions.add("All basic checks passed. This score is only an estimate.");
+        }
+
+        return suggestions;
     }
 
     private static void checkPassword() {
@@ -94,62 +146,71 @@ public class PasswordStrengthChecker {
             return;
         }
 
-        System.out.println("\n--- Password Report ---");
-        System.out.println("Length 8+: " +
-            (password.length() >= 8 ? "PASS" : "FAIL"));
-        System.out.println("Uppercase: " +
-            (containsUpper(password) ? "PASS" : "FAIL"));
-        System.out.println("Lowercase: " +
-            (containsLower(password) ? "PASS" : "FAIL"));
-        System.out.println("Number: " +
-            (containsDigit(password) ? "PASS" : "FAIL"));
-        System.out.println("Special character: " +
-            (containsSymbol(password) ? "PASS" : "FAIL"));
-        System.out.println("Repeated adjacent characters: " +
-            (hasRepeatedCharacters(password) ? "DETECTED" : "NOT DETECTED"));
-        System.out.println("Sequential pattern: " +
-            (hasSequentialPattern(password) ? "DETECTED" : "NOT DETECTED"));
-        System.out.println("Strength: " + analyzePassword(password));
+        int score = calculateScore(password);
+        String strength = getStrength(password, score);
+        List<String> suggestions = getSuggestions(password);
 
-        System.out.println("\nSuggestions:");
+        StringBuilder report = new StringBuilder();
+        report.append("PASSWORD SECURITY REPORT\n");
+        report.append("Generated: ").append(LocalDateTime.now()).append("\n");
+        report.append("--------------------------------\n");
+        report.append("Score: ").append(score).append("/100\n");
+        report.append("Strength: ").append(strength).append("\n");
+        report.append("Length: ").append(password.length()).append(" characters\n");
+        report.append("Uppercase: ").append(containsUpper(password) ? "Yes" : "No").append("\n");
+        report.append("Lowercase: ").append(containsLower(password) ? "Yes" : "No").append("\n");
+        report.append("Number: ").append(containsDigit(password) ? "Yes" : "No").append("\n");
+        report.append("Special character: ").append(containsSymbol(password) ? "Yes" : "No").append("\n");
+        report.append("Common password match: ")
+              .append(COMMON_PASSWORDS.contains(password.toLowerCase()) ? "Yes" : "No")
+              .append("\n");
+        report.append("\nSuggestions:\n");
 
-        boolean found = false;
-
-        if (password.length() < 12) {
-            System.out.println("- Use at least 12 characters.");
-            found = true;
-        }
-        if (!containsUpper(password)) {
-            System.out.println("- Add uppercase letters.");
-            found = true;
-        }
-        if (!containsLower(password)) {
-            System.out.println("- Add lowercase letters.");
-            found = true;
-        }
-        if (!containsDigit(password)) {
-            System.out.println("- Add numbers.");
-            found = true;
-        }
-        if (!containsSymbol(password)) {
-            System.out.println("- Add special characters.");
-            found = true;
-        }
-        if (COMMON_PASSWORDS.contains(password.toLowerCase())) {
-            System.out.println("- Avoid common passwords.");
-            found = true;
-        }
-        if (hasRepeatedCharacters(password)) {
-            System.out.println("- Avoid repeated adjacent characters.");
-            found = true;
-        }
-        if (hasSequentialPattern(password)) {
-            System.out.println("- Avoid predictable sequences.");
-            found = true;
+        for (String suggestion : suggestions) {
+            report.append("- ").append(suggestion).append("\n");
         }
 
-        if (!found) {
-            System.out.println("- All basic checks passed.");
+        report.append("\nNote: This is a basic educational estimate, not a security guarantee.\n");
+        report.append("The password itself is not included in this report.\n");
+
+        lastReport = report.toString();
+
+        // Keep only non-sensitive summaries in session history.
+        String historyEntry = "Score: " + score + "/100 | " + strength;
+        HISTORY.add(historyEntry);
+
+        System.out.println("\n" + lastReport);
+    }
+
+    private static void showHistory() {
+        System.out.println("\n--- Session History ---");
+
+        if (HISTORY.isEmpty()) {
+            System.out.println("No passwords checked in this session.");
+            return;
+        }
+
+        for (int i = 0; i < HISTORY.size(); i++) {
+            System.out.println((i + 1) + ". " + HISTORY.get(i));
+        }
+
+        System.out.println("Actual passwords are never stored in history.");
+    }
+
+    private static void exportReport() {
+        if (lastReport.equals("No report generated yet.")) {
+            System.out.println("Check a password first to create a report.");
+            return;
+        }
+
+        String filename = "PasswordSecurityReport.txt";
+
+        try {
+            Files.writeString(Path.of(filename), lastReport);
+            System.out.println("Report saved to: " +
+                Path.of(filename).toAbsolutePath());
+        } catch (IOException e) {
+            System.out.println("Could not save report: " + e.getMessage());
         }
     }
 
@@ -196,11 +257,13 @@ public class PasswordStrengthChecker {
     public static void main(String[] args) {
         while (true) {
             System.out.println("\n================================");
-            System.out.println(" PASSWORD STRENGTH CHECKER V3");
+            System.out.println(" PASSWORD STRENGTH CHECKER V4");
             System.out.println("================================");
             System.out.println("1. Check a password");
             System.out.println("2. Generate a password");
-            System.out.println("3. Exit");
+            System.out.println("3. View session history");
+            System.out.println("4. Export last security report");
+            System.out.println("5. Exit");
             System.out.print("Choose an option: ");
 
             String choice = SCANNER.nextLine();
@@ -213,11 +276,17 @@ public class PasswordStrengthChecker {
                     generatePassword();
                     break;
                 case "3":
-                    System.out.println("Thanks for using Password Checker V3!");
+                    showHistory();
+                    break;
+                case "4":
+                    exportReport();
+                    break;
+                case "5":
+                    System.out.println("Thanks for using Password Checker V4!");
                     SCANNER.close();
                     return;
                 default:
-                    System.out.println("Invalid choice. Select 1, 2, or 3.");
+                    System.out.println("Invalid choice. Select 1-5.");
             }
         }
     }
