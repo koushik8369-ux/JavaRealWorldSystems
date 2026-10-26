@@ -20,10 +20,10 @@ import java.util.concurrent.TimeUnit;
  * A console-based Multiple-Choice Quiz Application built with core Java.
  * Features:
  * - Player profile support with custom player names.
+ * - Topic selection: Java Fundamentals, OOP, Arrays, Strings, Collections, Exceptions, or All Topics.
  * - Three distinct difficulty levels: Easy, Medium, and Hard.
  * - Configurable question timer (defaulting to 20 seconds).
  * - Automatic timeout detection marking unanswered questions as incorrect.
- * - Question sets covering Java Fundamentals, OOP, Arrays, Strings, Collections, and Exceptions.
  * - Robust input validation and case-insensitive answering (A, B, C, D).
  * - Instant feedback showing whether each answer was correct, incorrect, or timed out.
  * - Persistent storage of quiz attempts in a local CSV file (quiz_results.csv).
@@ -90,6 +90,29 @@ public class QuizApplication {
             return subDirFile;
         }
         return new File(CSV_FILE_NAME);
+    }
+
+    /**
+     * Enum representing the supported quiz topics.
+     */
+    enum Topic {
+        ALL("All Topics"),
+        FUNDAMENTALS("Java Fundamentals"),
+        OOP("Object-Oriented Programming"),
+        ARRAYS("Arrays"),
+        STRINGS("Strings"),
+        COLLECTIONS("Collections Framework"),
+        EXCEPTIONS("Exception Handling");
+
+        private final String displayName;
+
+        Topic(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
     }
 
     /**
@@ -161,14 +184,20 @@ public class QuizApplication {
      * Inner class representing a single multiple-choice question.
      */
     static class Question {
+        private final Topic topic;
         private final String questionText;
         private final String[] options;
         private final char correctOption; // 'A', 'B', 'C', or 'D'
 
-        public Question(String questionText, String[] options, char correctOption) {
+        public Question(Topic topic, String questionText, String[] options, char correctOption) {
+            this.topic = topic;
             this.questionText = questionText;
             this.options = options;
             this.correctOption = Character.toUpperCase(correctOption);
+        }
+
+        public Topic getTopic() {
+            return topic;
         }
 
         public String getQuestionText() {
@@ -199,7 +228,7 @@ public class QuizApplication {
          * Displays the question, its options, and the clear time limit.
          */
         public void displayQuestion(int questionNumber, int timeLimitSeconds) {
-            System.out.println("Question " + questionNumber + ": " + questionText);
+            System.out.println("Question " + questionNumber + " [" + topic.getDisplayName() + "]: " + questionText);
             char label = 'A';
             for (String option : options) {
                 System.out.println("  " + label + ") " + option);
@@ -210,27 +239,33 @@ public class QuizApplication {
     }
 
     /**
-     * Manages quiz questions for the selected difficulty level, execution flow,
-     * scoring, timer management, and performance summary.
+     * Manages quiz questions for the selected difficulty level and topic,
+     * execution flow, scoring, timer management, and performance summary.
      */
     static class Quiz {
         private final String playerName;
         private final Difficulty difficulty;
+        private final Topic topic;
         private final int timeLimitSeconds;
         private final List<Question> questions;
         private int correctCount;
         private int incorrectCount;
 
-        public Quiz(String playerName, Difficulty difficulty, int timeLimitSeconds) {
+        public Quiz(String playerName, Difficulty difficulty, Topic topic, int timeLimitSeconds) {
             this.playerName = playerName;
             this.difficulty = difficulty;
+            this.topic = topic;
             this.timeLimitSeconds = timeLimitSeconds;
             this.questions = new ArrayList<>();
-            loadQuestionsForDifficulty(difficulty);
+            loadQuestionsForDifficultyAndTopic(difficulty, topic);
         }
 
         public Difficulty getDifficulty() {
             return difficulty;
+        }
+
+        public Topic getTopic() {
+            return topic;
         }
 
         public int getTimeLimitSeconds() {
@@ -238,90 +273,161 @@ public class QuizApplication {
         }
 
         /**
-         * Populates the question list according to the chosen difficulty level.
+         * Populates the question list according to the chosen difficulty and topic.
          */
-        private void loadQuestionsForDifficulty(Difficulty difficulty) {
+        private void loadQuestionsForDifficultyAndTopic(Difficulty difficulty, Topic topic) {
+            List<Question> bank = new ArrayList<>();
             switch (difficulty) {
-                case EASY -> loadEasyQuestions();
-                case MEDIUM -> loadMediumQuestions();
-                case HARD -> loadHardQuestions();
+                case EASY -> loadEasyQuestions(bank);
+                case MEDIUM -> loadMediumQuestions(bank);
+                case HARD -> loadHardQuestions(bank);
+            }
+
+            for (Question q : bank) {
+                if (topic == Topic.ALL || q.getTopic() == topic) {
+                    questions.add(q);
+                }
             }
         }
 
         /**
-         * Easy level questions covering core concepts.
+         * Easy level questions covering core concepts across topics.
          */
-        private void loadEasyQuestions() {
+        private void loadEasyQuestions(List<Question> bank) {
             // Fundamentals
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.FUNDAMENTALS,
                 "What is the size of an int data type in Java?",
                 new String[]{"8 bits", "16 bits", "32 bits", "64 bits"},
                 'C'
             ));
+            bank.add(new Question(
+                Topic.FUNDAMENTALS,
+                "Which keyword is used to declare a constant variable in Java whose value cannot be reassigned?",
+                new String[]{"static", "const", "final", "var"},
+                'C'
+            ));
 
             // OOP
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.OOP,
                 "Which keyword is used by a class to inherit another class in Java?",
                 new String[]{"implements", "extends", "inherits", "super"},
                 'B'
             ));
+            bank.add(new Question(
+                Topic.OOP,
+                "Which OOP concept combines fields and methods into a single unit while restricting direct outside access?",
+                new String[]{"Polymorphism", "Inheritance", "Encapsulation", "Abstraction"},
+                'C'
+            ));
 
             // Arrays
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.ARRAYS,
                 "What is the index of the very first element in any Java array?",
                 new String[]{"0", "1", "-1", "null"},
                 'A'
             ));
+            bank.add(new Question(
+                Topic.ARRAYS,
+                "Which property is used to determine the total number of elements in a Java array?",
+                new String[]{"length()", "length", "size()", "capacity"},
+                'B'
+            ));
 
             // Strings
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.STRINGS,
                 "Which method is used to find the total number of characters in a String?",
                 new String[]{"size()", "length()", "capacity()", "count()"},
                 'B'
             ));
+            bank.add(new Question(
+                Topic.STRINGS,
+                "Which method extracts a single character from a String at a given index?",
+                new String[]{"charAt()", "getChar()", "charOf()", "indexOf()"},
+                'A'
+            ));
 
             // Collections
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.COLLECTIONS,
                 "Which List class in the Java Collections Framework provides a resizable array?",
                 new String[]{"ArrayList", "HashSet", "HashMap", "TreeMap"},
                 'A'
             ));
+            bank.add(new Question(
+                Topic.COLLECTIONS,
+                "Which method is used to append an element to an ArrayList in Java?",
+                new String[]{"push()", "put()", "add()", "insert()"},
+                'C'
+            ));
 
             // Exceptions
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.EXCEPTIONS,
                 "Which keyword is used in Java to explicitly throw an exception object?",
                 new String[]{"throws", "catch", "throw", "try"},
                 'C'
+            ));
+            bank.add(new Question(
+                Topic.EXCEPTIONS,
+                "Which block in Java is used to enclose code that might throw an exception?",
+                new String[]{"catch", "try", "finally", "throw"},
+                'B'
             ));
         }
 
         /**
          * Medium level questions covering intermediate Java topics.
          */
-        private void loadMediumQuestions() {
+        private void loadMediumQuestions(List<Question> bank) {
             // Fundamentals
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.FUNDAMENTALS,
                 "What is the default value of an uninitialized instance variable of reference type in Java?",
                 new String[]{"0", "\"\"", "null", "undefined"},
                 'C'
             ));
+            bank.add(new Question(
+                Topic.FUNDAMENTALS,
+                "Which primitive type is used to store single-precision 32-bit floating-point numbers in Java?",
+                new String[]{"double", "float", "long", "decimal"},
+                'B'
+            ));
 
             // OOP
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.OOP,
                 "Which special method is invoked when an object is created and has the same name as its class?",
                 new String[]{"Method", "Constructor", "Destructor", "Initializer"},
                 'B'
             ));
+            bank.add(new Question(
+                Topic.OOP,
+                "Which keyword is used within a subclass method to invoke a superclass constructor or method?",
+                new String[]{"this", "parent", "base", "super"},
+                'D'
+            ));
 
             // Arrays
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.ARRAYS,
                 "What runtime exception occurs if you access an array with an index equal to or greater than its length?",
                 new String[]{"ArrayIndexOutOfBoundsException", "NullPointerException", "IllegalArgumentException", "ArrayStoreException"},
                 'A'
             ));
+            bank.add(new Question(
+                Topic.ARRAYS,
+                "What is the default initial value of elements inside a newly allocated int array (new int[5])?",
+                new String[]{"null", "0", "-1", "undefined"},
+                'B'
+            ));
 
             // Strings
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.STRINGS,
                 "Why are String objects in Java considered immutable?",
                 new String[]{
                     "They can only store numeric values",
@@ -331,35 +437,68 @@ public class QuizApplication {
                 },
                 'B'
             ));
+            bank.add(new Question(
+                Topic.STRINGS,
+                "Which class provides a mutable character sequence and is optimized for non-thread-safe string concatenations?",
+                new String[]{"String", "StringBuffer", "StringBuilder", "CharSequence"},
+                'C'
+            ));
 
             // Collections
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.COLLECTIONS,
                 "Which Collection interface implementation does NOT allow duplicate elements and does not guarantee insertion order?",
                 new String[]{"ArrayList", "LinkedList", "HashSet", "Vector"},
                 'C'
             ));
+            bank.add(new Question(
+                Topic.COLLECTIONS,
+                "Which Map implementation maintains its key-value pairs in their order of insertion?",
+                new String[]{"HashMap", "LinkedHashMap", "TreeMap", "Hashtable"},
+                'B'
+            ));
 
             // Exceptions
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.EXCEPTIONS,
                 "Which block in exception handling ALWAYS executes whether an exception was thrown or not?",
                 new String[]{"try", "catch", "finally", "throw"},
                 'C'
+            ));
+            bank.add(new Question(
+                Topic.EXCEPTIONS,
+                "Which keyword is placed in a method signature to declare exceptions that might be thrown out of the method?",
+                new String[]{"throw", "throws", "try", "catch"},
+                'B'
             ));
         }
 
         /**
          * Hard level questions covering advanced Java concepts.
          */
-        private void loadHardQuestions() {
+        private void loadHardQuestions(List<Question> bank) {
             // Fundamentals / Memory
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.FUNDAMENTALS,
                 "In which JVM memory area are string literals stored to optimize memory reuse?",
                 new String[]{"Call Stack", "String Constant Pool", "Native Method Stack", "Register Area"},
                 'B'
             ));
+            bank.add(new Question(
+                Topic.FUNDAMENTALS,
+                "What memory guarantee does the 'volatile' keyword provide to a variable in multithreaded Java?",
+                new String[]{
+                    "Guarantees atomicity of compound operations like incrementing",
+                    "Ensures memory visibility across threads and prevents CPU instruction reordering",
+                    "Prevents the variable from being garbage collected",
+                    "Synchronizes access across all methods using object monitors"
+                },
+                'B'
+            ));
 
             // OOP
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.OOP,
                 "What is the key difference between method overloading and method overriding?",
                 new String[]{
                     "Overloading occurs at runtime; overriding occurs at compile time",
@@ -369,9 +508,21 @@ public class QuizApplication {
                 },
                 'B'
             ));
+            bank.add(new Question(
+                Topic.OOP,
+                "How does Java eliminate the classic multiple-inheritance Diamond Problem with classes?",
+                new String[]{
+                    "By allowing a class to extend only one single direct superclass",
+                    "By using runtime dynamic method dispatch over interfaces",
+                    "By requiring all methods in parent classes to be declared final",
+                    "By forbidding default methods in interfaces"
+                },
+                'A'
+            ));
 
             // Arrays / Generics
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.ARRAYS,
                 "Why cannot you directly instantiate a generic array like 'new T[10]' in Java?",
                 new String[]{
                     "Due to type erasure at compile time where type parameters are erased at runtime",
@@ -381,23 +532,49 @@ public class QuizApplication {
                 },
                 'A'
             ));
+            bank.add(new Question(
+                Topic.ARRAYS,
+                "Which sorting algorithm is primarily implemented by Arrays.sort() for primitive arrays in modern Java?",
+                new String[]{"Dual-Pivot Quicksort", "Bubble Sort", "Insertion Sort", "Heap Sort"},
+                'A'
+            ));
 
             // Strings / Concurrency
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.STRINGS,
                 "Which class should be preferred when performing heavy string concatenations across multiple concurrent threads?",
                 new String[]{"StringBuilder", "StringBuffer", "String", "CharSequence"},
                 'B'
             ));
+            bank.add(new Question(
+                Topic.STRINGS,
+                "What does invoking the intern() method on a String object return in Java?",
+                new String[]{
+                    "A new heap copy of the string",
+                    "The canonical instance from the String Constant Pool",
+                    "A char array representation of the string",
+                    "An encrypted hash of the string"
+                },
+                'B'
+            ));
 
             // Collections
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.COLLECTIONS,
                 "Which Map implementation stores key-value pairs sorted according to the natural ordering of keys or a custom Comparator?",
                 new String[]{"HashMap", "LinkedHashMap", "TreeMap", "Hashtable"},
                 'C'
             ));
+            bank.add(new Question(
+                Topic.COLLECTIONS,
+                "Which Queue implementation orders elements according to their natural ordering or a specified Comparator via a priority heap?",
+                new String[]{"ArrayDeque", "PriorityQueue", "LinkedList", "ConcurrentLinkedQueue"},
+                'B'
+            ));
 
             // Exceptions
-            questions.add(new Question(
+            bank.add(new Question(
+                Topic.EXCEPTIONS,
                 "What distinguishes checked exceptions from unchecked exceptions in Java?",
                 new String[]{
                     "Unchecked exceptions inherit from Exception; checked inherit from Error",
@@ -405,6 +582,12 @@ public class QuizApplication {
                     "Checked exceptions cannot be caught in a catch block",
                     "Unchecked exceptions must always be declared using throws"
                 },
+                'B'
+            ));
+            bank.add(new Question(
+                Topic.EXCEPTIONS,
+                "Which interface must a resource class implement to be safely used inside a Java try-with-resources statement?",
+                new String[]{"Closeable only", "AutoCloseable", "Serializable", "Disposable"},
                 'B'
             ));
         }
@@ -420,8 +603,9 @@ public class QuizApplication {
 
             System.out.println("=================================================");
             System.out.println("     QUIZ IN PROGRESS [" + difficulty.getDisplayName().toUpperCase() + " LEVEL]");
+            System.out.println("     Topic : " + topic.getDisplayName());
             System.out.println("     Player: " + playerName);
-            System.out.println("     Time limit: " + timeLimitSeconds + "s per question");
+            System.out.println("     Timer : " + timeLimitSeconds + "s per question");
             System.out.println("=================================================");
 
             int totalQuestions = questions.size();
@@ -454,7 +638,13 @@ public class QuizApplication {
             displayResults(totalQuestions, percentage);
 
             String timestamp = LocalDateTime.now().format(DATE_FORMATTER);
-            return new QuizResult(playerName, difficulty.getDisplayName(), correctCount,
+
+            // Format difficulty label in CSV: "Easy" if All Topics, or "Easy (Arrays)" if specific topic
+            String difficultyLabel = (topic == Topic.ALL)
+                ? difficulty.getDisplayName()
+                : difficulty.getDisplayName() + " (" + topic.getDisplayName() + ")";
+
+            return new QuizResult(playerName, difficultyLabel, correctCount,
                                   totalQuestions, percentage, timestamp);
         }
 
@@ -505,7 +695,7 @@ public class QuizApplication {
 
         /**
          * Calculates and displays score, percentage, counts, selected difficulty,
-         * player name, and performance message.
+         * selected topic, player name, and performance message.
          */
         private void displayResults(int totalQuestions, double percentage) {
             System.out.println();
@@ -513,6 +703,7 @@ public class QuizApplication {
             System.out.println("                 FINAL RESULTS                   ");
             System.out.println("=================================================");
             System.out.println("Player Name      : " + playerName);
+            System.out.println("Topic            : " + topic.getDisplayName());
             System.out.println("Difficulty Level : " + difficulty.getDisplayName());
             System.out.println("Time Limit       : " + timeLimitSeconds + "s per question");
             System.out.println("Total Questions  : " + totalQuestions);
@@ -593,6 +784,7 @@ public class QuizApplication {
 
     /**
      * Appends a completed quiz attempt to the persistent CSV results file.
+     * Preserves standard 6-column schema for complete backward compatibility.
      */
     private static void saveResult(QuizResult result) {
         File file = getResultsFile();
@@ -618,6 +810,7 @@ public class QuizApplication {
 
     /**
      * Reads all quiz attempts from the CSV file.
+     * Supports standard 6-column format as well as optional 7-column format seamlessly.
      */
     private static List<QuizResult> loadResults() {
         List<QuizResult> results = new ArrayList<>();
@@ -639,10 +832,17 @@ public class QuizApplication {
                     try {
                         String name = tokens.get(0);
                         String difficulty = tokens.get(1);
-                        int correct = Integer.parseInt(tokens.get(2));
-                        int total = Integer.parseInt(tokens.get(3));
-                        double percentage = Double.parseDouble(tokens.get(4));
-                        String timestamp = tokens.get(5);
+
+                        // Backward-compatible column indices (handles 6-column or 7-column schema)
+                        int correctIndex = (tokens.size() >= 7) ? 3 : 2;
+                        int totalIndex = (tokens.size() >= 7) ? 4 : 3;
+                        int pctIndex = (tokens.size() >= 7) ? 5 : 4;
+                        int timeIndex = (tokens.size() >= 7) ? 6 : 5;
+
+                        int correct = Integer.parseInt(tokens.get(correctIndex));
+                        int total = Integer.parseInt(tokens.get(totalIndex));
+                        double percentage = Double.parseDouble(tokens.get(pctIndex));
+                        String timestamp = tokens.get(timeIndex);
 
                         results.add(new QuizResult(name, difficulty, correct, total, percentage, timestamp));
                     } catch (NumberFormatException ignored) {
@@ -664,13 +864,13 @@ public class QuizApplication {
         List<QuizResult> results = loadResults();
 
         System.out.println();
-        System.out.println("=========================================================================================");
-        System.out.println("                              QUIZ LEADERBOARD (TOP 10)                                 ");
-        System.out.println("=========================================================================================");
+        System.out.println("===================================================================================================");
+        System.out.println("                                    QUIZ LEADERBOARD (TOP 10)                                      ");
+        System.out.println("===================================================================================================");
 
         if (results.isEmpty()) {
             System.out.println("  No quiz records found yet! Take a quiz to become the first on the leaderboard!");
-            System.out.println("=========================================================================================");
+            System.out.println("===================================================================================================");
             return;
         }
 
@@ -683,24 +883,28 @@ public class QuizApplication {
             return Integer.compare(r2.getCorrectAnswers(), r1.getCorrectAnswers());
         });
 
-        System.out.printf("%-5s %-25s %-12s %-10s %-12s %-20s%n",
-            "Rank", "Player Name", "Difficulty", "Score", "Percentage", "Date/Time");
-        System.out.println("-----------------------------------------------------------------------------------------");
+        System.out.printf("%-5s %-22s %-25s %-10s %-12s %-20s%n",
+            "Rank", "Player Name", "Difficulty/Topic", "Score", "Percentage", "Date/Time");
+        System.out.println("---------------------------------------------------------------------------------------------------");
 
         int limit = Math.min(10, results.size());
         for (int i = 0; i < limit; i++) {
             QuizResult r = results.get(i);
             String displayName = r.getPlayerName();
-            if (displayName.length() > 23) {
-                displayName = displayName.substring(0, 20) + "...";
+            if (displayName.length() > 20) {
+                displayName = displayName.substring(0, 17) + "...";
+            }
+            String diffTopic = r.getDifficulty();
+            if (diffTopic.length() > 24) {
+                diffTopic = diffTopic.substring(0, 21) + "...";
             }
             String scoreStr = r.getCorrectAnswers() + " / " + r.getTotalQuestions();
             String pctStr = String.format(Locale.US, "%.1f%%", r.getPercentage());
 
-            System.out.printf("%-5d %-25s %-12s %-10s %-12s %-20s%n",
-                (i + 1), displayName, r.getDifficulty(), scoreStr, pctStr, r.getTimestamp());
+            System.out.printf("%-5d %-22s %-25s %-10s %-12s %-20s%n",
+                (i + 1), displayName, diffTopic, scoreStr, pctStr, r.getTimestamp());
         }
-        System.out.println("=========================================================================================");
+        System.out.println("===================================================================================================");
     }
 
     /**
@@ -722,27 +926,44 @@ public class QuizApplication {
     }
 
     /**
-     * Displays the welcome banner and quiz instructions.
+     * Prompts the player to choose a quiz topic or select All Topics.
      */
-    private static void displayWelcomeAndInstructions() {
-        System.out.println("=================================================");
-        System.out.println("         WELCOME TO JAVA QUIZ APPLICATION        ");
-        System.out.println("=================================================");
-        System.out.println("Instructions:");
-        System.out.println("1. Choose a difficulty level: Easy, Medium, or Hard.");
-        System.out.println("2. Topics include: Fundamentals, OOP, Arrays,");
-        System.out.println("   Strings, Collections, and Exception Handling.");
-        System.out.println("3. Each question has four options: A, B, C, D.");
-        System.out.println("4. Answers are case-insensitive ('a' or 'A').");
-        System.out.println("5. Each question has a time limit (default: " + defaultTimeLimitSeconds + "s,");
-        System.out.println("   configurable in Settings).");
-        System.out.println("6. If time expires, the question is marked wrong");
-        System.out.println("   and the correct answer is revealed.");
-        System.out.println("7. Invalid inputs will be safely rejected.");
-        System.out.println("8. Immediate feedback is given after each answer.");
-        System.out.println("9. Scores are permanently saved to the Leaderboard!");
-        System.out.println("=================================================");
-        System.out.println();
+    private static Topic selectTopic() {
+        System.out.println("Select Quiz Topic:");
+        System.out.println("  1) All Topics");
+        System.out.println("  2) Java Fundamentals");
+        System.out.println("  3) Object-Oriented Programming");
+        System.out.println("  4) Arrays");
+        System.out.println("  5) Strings");
+        System.out.println("  6) Collections Framework");
+        System.out.println("  7) Exception Handling");
+
+        while (true) {
+            System.out.print("Enter your choice (1-7 or topic name): ");
+            String input = readLine();
+            if (input == null) {
+                return Topic.ALL;
+            }
+            input = input.trim().toUpperCase();
+
+            if (input.equals("1") || input.contains("ALL")) {
+                return Topic.ALL;
+            } else if (input.equals("2") || input.contains("FUNDAMENTAL")) {
+                return Topic.FUNDAMENTALS;
+            } else if (input.equals("3") || input.contains("OOP") || input.contains("OBJECT")) {
+                return Topic.OOP;
+            } else if (input.equals("4") || input.contains("ARRAY")) {
+                return Topic.ARRAYS;
+            } else if (input.equals("5") || input.contains("STRING")) {
+                return Topic.STRINGS;
+            } else if (input.equals("6") || input.contains("COLLECTION")) {
+                return Topic.COLLECTIONS;
+            } else if (input.equals("7") || input.contains("EXCEPTION")) {
+                return Topic.EXCEPTIONS;
+            } else {
+                System.out.println("Invalid choice! Please enter a number from 1 to 7 or the topic name.");
+            }
+        }
     }
 
     /**
@@ -771,6 +992,30 @@ public class QuizApplication {
                 System.out.println("Invalid choice! Please enter 1, 2, 3, or the difficulty name.");
             }
         }
+    }
+
+    /**
+     * Displays the welcome banner and quiz instructions.
+     */
+    private static void displayWelcomeAndInstructions() {
+        System.out.println("=================================================");
+        System.out.println("         WELCOME TO JAVA QUIZ APPLICATION        ");
+        System.out.println("=================================================");
+        System.out.println("Instructions:");
+        System.out.println("1. Choose a topic: Fundamentals, OOP, Arrays,");
+        System.out.println("   Strings, Collections, Exceptions, or All Topics.");
+        System.out.println("2. Choose a difficulty level: Easy, Medium, or Hard.");
+        System.out.println("3. Each question has four options: A, B, C, D.");
+        System.out.println("4. Answers are case-insensitive ('a' or 'A').");
+        System.out.println("5. Each question has a time limit (default: " + defaultTimeLimitSeconds + "s,");
+        System.out.println("   configurable in Settings).");
+        System.out.println("6. If time expires, the question is marked wrong");
+        System.out.println("   and the correct answer is revealed.");
+        System.out.println("7. Invalid inputs will be safely rejected.");
+        System.out.println("8. Immediate feedback is given after each answer.");
+        System.out.println("9. Scores are permanently saved to the Leaderboard!");
+        System.out.println("=================================================");
+        System.out.println();
     }
 
     /**
@@ -859,10 +1104,12 @@ public class QuizApplication {
                     boolean playAgain = true;
                     while (playAgain) {
                         System.out.println();
+                        Topic selectedTopic = selectTopic();
+                        System.out.println();
                         Difficulty selectedDifficulty = selectDifficulty();
                         System.out.println();
 
-                        Quiz quiz = new Quiz(playerName, selectedDifficulty, defaultTimeLimitSeconds);
+                        Quiz quiz = new Quiz(playerName, selectedDifficulty, selectedTopic, defaultTimeLimitSeconds);
                         QuizResult result = quiz.start();
                         saveResult(result);
 
