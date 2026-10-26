@@ -3,13 +3,16 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Scanner;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * QuizApplication
@@ -18,9 +21,11 @@ import java.util.Scanner;
  * Features:
  * - Player profile support with custom player names.
  * - Three distinct difficulty levels: Easy, Medium, and Hard.
+ * - Configurable question timer (defaulting to 20 seconds).
+ * - Automatic timeout detection marking unanswered questions as incorrect.
  * - Question sets covering Java Fundamentals, OOP, Arrays, Strings, Collections, and Exceptions.
  * - Robust input validation and case-insensitive answering (A, B, C, D).
- * - Instant feedback showing whether each answer was correct or incorrect.
+ * - Instant feedback showing whether each answer was correct, incorrect, or timed out.
  * - Persistent storage of quiz attempts in a local CSV file (quiz_results.csv).
  * - Leaderboard displaying the top 10 attempts ranked by percentage score.
  * - Safe handling of special characters (commas, quotes) in player names.
@@ -29,6 +34,50 @@ public class QuizApplication {
 
     private static final String CSV_FILE_NAME = "quiz_results.csv";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    // Configurable time limit in seconds per question (defaults to 20 seconds)
+    private static int defaultTimeLimitSeconds = 20;
+
+    // Asynchronous console input queue managed by a single background daemon thread
+    private static final BlockingQueue<String> inputQueue = new LinkedBlockingQueue<>();
+    private static final String EOF_MARKER = "\u0000__EOF__\u0000";
+
+    static {
+        Thread consoleReader = new Thread(() -> {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+            try {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    inputQueue.put(line);
+                }
+                inputQueue.put(EOF_MARKER);
+            } catch (IOException | InterruptedException ignored) {
+                try {
+                    inputQueue.put(EOF_MARKER);
+                } catch (InterruptedException ignored2) {
+                }
+            }
+        }, "ConsoleInputReaderThread");
+        consoleReader.setDaemon(true);
+        consoleReader.start();
+    }
+
+    /**
+     * Reads a single line of input from the console queue indefinitely.
+     * Returns null if the input stream terminates (EOF).
+     */
+    private static String readLine() {
+        try {
+            String line = inputQueue.take();
+            if (EOF_MARKER.equals(line)) {
+                return null;
+            }
+            return line;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+    }
 
     /**
      * Resolves the target results CSV file.
@@ -147,38 +196,45 @@ public class QuizApplication {
         }
 
         /**
-         * Displays the question and its four options formatted neatly.
+         * Displays the question, its options, and the clear time limit.
          */
-        public void displayQuestion(int questionNumber) {
+        public void displayQuestion(int questionNumber, int timeLimitSeconds) {
             System.out.println("Question " + questionNumber + ": " + questionText);
             char label = 'A';
             for (String option : options) {
                 System.out.println("  " + label + ") " + option);
                 label++;
             }
+            System.out.println("[Time limit: " + timeLimitSeconds + " seconds]");
         }
     }
 
     /**
      * Manages quiz questions for the selected difficulty level, execution flow,
-     * scoring, and performance summary.
+     * scoring, timer management, and performance summary.
      */
     static class Quiz {
         private final String playerName;
         private final Difficulty difficulty;
+        private final int timeLimitSeconds;
         private final List<Question> questions;
         private int correctCount;
         private int incorrectCount;
 
-        public Quiz(String playerName, Difficulty difficulty) {
+        public Quiz(String playerName, Difficulty difficulty, int timeLimitSeconds) {
             this.playerName = playerName;
             this.difficulty = difficulty;
+            this.timeLimitSeconds = timeLimitSeconds;
             this.questions = new ArrayList<>();
             loadQuestionsForDifficulty(difficulty);
         }
 
         public Difficulty getDifficulty() {
             return difficulty;
+        }
+
+        public int getTimeLimitSeconds() {
+            return timeLimitSeconds;
         }
 
         /**
@@ -354,36 +410,43 @@ public class QuizApplication {
         }
 
         /**
-         * Runs the quiz from start to finish.
+         * Runs the quiz from start to finish with question timers.
          * 
-         * @param scanner Shared Scanner instance for console reading.
          * @return The QuizResult object representing this completed attempt.
          */
-        public QuizResult start(Scanner scanner) {
+        public QuizResult start() {
             correctCount = 0;
             incorrectCount = 0;
 
             System.out.println("=================================================");
             System.out.println("     QUIZ IN PROGRESS [" + difficulty.getDisplayName().toUpperCase() + " LEVEL]");
             System.out.println("     Player: " + playerName);
+            System.out.println("     Time limit: " + timeLimitSeconds + "s per question");
             System.out.println("=================================================");
 
             int totalQuestions = questions.size();
             for (int i = 0; i < totalQuestions; i++) {
                 Question question = questions.get(i);
                 System.out.println();
-                question.displayQuestion(i + 1);
+                question.displayQuestion(i + 1, timeLimitSeconds);
 
-                char userChoice = promptForValidOption(scanner);
+                Character userChoice = promptForTimedOption(timeLimitSeconds);
 
-                if (question.isCorrect(userChoice)) {
-                    System.out.println(">> Correct! Well done.");
-                    correctCount++;
-                } else {
-                    System.out.println(">> Incorrect!");
+                if (userChoice == null) {
+                    System.out.println("\n>> Time's up! You exceeded the " + timeLimitSeconds + "-second time limit.");
                     System.out.println("   The correct answer was: " 
                         + question.getCorrectOption() + ") " + question.getCorrectOptionText());
                     incorrectCount++;
+                } else {
+                    if (question.isCorrect(userChoice)) {
+                        System.out.println(">> Correct! Well done.");
+                        correctCount++;
+                    } else {
+                        System.out.println(">> Incorrect!");
+                        System.out.println("   The correct answer was: " 
+                            + question.getCorrectOption() + ") " + question.getCorrectOptionText());
+                        incorrectCount++;
+                    }
                 }
             }
 
@@ -396,20 +459,47 @@ public class QuizApplication {
         }
 
         /**
-         * Continuously prompts the user until a valid option (A, B, C, or D) is entered.
+         * Prompts the user with a strict time limit.
+         * Returns the chosen option (A, B, C, or D) or null if the timer expires.
          */
-        private char promptForValidOption(Scanner scanner) {
-            while (true) {
-                System.out.print("Your answer (A, B, C, D): ");
-                String input = scanner.nextLine().trim();
+        private Character promptForTimedOption(int timeLimitSeconds) {
+            long deadline = System.currentTimeMillis() + (timeLimitSeconds * 1000L);
+            System.out.print("Your answer (A, B, C, D): ");
 
-                if (input.length() == 1) {
-                    char choice = Character.toUpperCase(input.charAt(0));
+            while (true) {
+                long remainingMs = deadline - System.currentTimeMillis();
+                if (remainingMs <= 0) {
+                    return null; // Time expired
+                }
+
+                long remainingSec = (remainingMs + 999) / 1000;
+                String line;
+                try {
+                    line = inputQueue.poll(remainingSec, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                }
+
+                if (line == null || EOF_MARKER.equals(line)) {
+                    return null; // Time expired or EOF reached
+                }
+
+                String trimmed = line.trim();
+                if (trimmed.length() == 1) {
+                    char choice = Character.toUpperCase(trimmed.charAt(0));
                     if (choice >= 'A' && choice <= 'D') {
                         return choice;
                     }
                 }
-                System.out.println("Invalid input! Please enter only A, B, C, or D.");
+
+                long afterRemainingMs = deadline - System.currentTimeMillis();
+                if (afterRemainingMs <= 0) {
+                    return null; // Time expired during retry
+                }
+                long afterRemainingSec = (afterRemainingMs + 999) / 1000;
+                System.out.println("Invalid input! Please enter only A, B, C, or D (" + afterRemainingSec + "s remaining).");
+                System.out.print("Your answer (A, B, C, D): ");
             }
         }
 
@@ -424,6 +514,7 @@ public class QuizApplication {
             System.out.println("=================================================");
             System.out.println("Player Name      : " + playerName);
             System.out.println("Difficulty Level : " + difficulty.getDisplayName());
+            System.out.println("Time Limit       : " + timeLimitSeconds + "s per question");
             System.out.println("Total Questions  : " + totalQuestions);
             System.out.println("Correct Answers  : " + correctCount);
             System.out.println("Incorrect Answers: " + incorrectCount);
@@ -452,8 +543,6 @@ public class QuizApplication {
 
     /**
      * Escapes a string to conform with CSV standards (RFC 4180).
-     * If the field contains commas, double quotes, or newlines, it wraps the field
-     * in double quotes and escapes any internal quotes as double-double-quotes.
      */
     public static String escapeCsvField(String field) {
         if (field == null) {
@@ -617,10 +706,14 @@ public class QuizApplication {
     /**
      * Prompts the player to enter a valid non-empty name.
      */
-    private static String promptPlayerName(Scanner scanner) {
+    private static String promptPlayerName() {
         while (true) {
             System.out.print("Enter your name: ");
-            String name = scanner.nextLine().trim();
+            String name = readLine();
+            if (name == null) {
+                return "Player";
+            }
+            name = name.trim();
             if (!name.isEmpty()) {
                 return name;
             }
@@ -641,9 +734,13 @@ public class QuizApplication {
         System.out.println("   Strings, Collections, and Exception Handling.");
         System.out.println("3. Each question has four options: A, B, C, D.");
         System.out.println("4. Answers are case-insensitive ('a' or 'A').");
-        System.out.println("5. Invalid inputs will be safely rejected.");
-        System.out.println("6. Immediate feedback is given after each answer.");
-        System.out.println("7. Scores are permanently saved to the Leaderboard!");
+        System.out.println("5. Each question has a time limit (default: " + defaultTimeLimitSeconds + "s,");
+        System.out.println("   configurable in Settings).");
+        System.out.println("6. If time expires, the question is marked wrong");
+        System.out.println("   and the correct answer is revealed.");
+        System.out.println("7. Invalid inputs will be safely rejected.");
+        System.out.println("8. Immediate feedback is given after each answer.");
+        System.out.println("9. Scores are permanently saved to the Leaderboard!");
         System.out.println("=================================================");
         System.out.println();
     }
@@ -651,7 +748,7 @@ public class QuizApplication {
     /**
      * Prompts the user to select a difficulty level with validation.
      */
-    private static Difficulty selectDifficulty(Scanner scanner) {
+    private static Difficulty selectDifficulty() {
         System.out.println("Select Difficulty Level:");
         System.out.println("  1) Easy");
         System.out.println("  2) Medium");
@@ -659,8 +756,11 @@ public class QuizApplication {
 
         while (true) {
             System.out.print("Enter your choice (1-3 or Easy/Medium/Hard): ");
-            String input = scanner.nextLine().trim();
-
+            String input = readLine();
+            if (input == null) {
+                return Difficulty.EASY;
+            }
+            input = input.trim();
             if (input.equals("1") || input.equalsIgnoreCase("EASY")) {
                 return Difficulty.EASY;
             } else if (input.equals("2") || input.equalsIgnoreCase("MEDIUM")) {
@@ -674,13 +774,43 @@ public class QuizApplication {
     }
 
     /**
+     * Allows the user to configure the question time limit in seconds.
+     */
+    private static void configureSettings() {
+        System.out.println();
+        System.out.println("---------------- SETTINGS ----------------");
+        System.out.println("Current Question Time Limit: " + defaultTimeLimitSeconds + " seconds");
+        System.out.print("Enter new time limit in seconds (1-120, or press Enter to keep current): ");
+        String input = readLine();
+        if (input == null || input.trim().isEmpty()) {
+            System.out.println("No changes made. Keeping " + defaultTimeLimitSeconds + " seconds.");
+            return;
+        }
+
+        try {
+            int newLimit = Integer.parseInt(input.trim());
+            if (newLimit >= 1 && newLimit <= 120) {
+                defaultTimeLimitSeconds = newLimit;
+                System.out.println(">> Time limit successfully updated to " + defaultTimeLimitSeconds + " seconds per question.");
+            } else {
+                System.out.println("Invalid value! Please enter a number between 1 and 120 seconds.");
+            }
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid input! Please enter a valid number.");
+        }
+    }
+
+    /**
      * Prompts the user whether they would like to attempt another quiz.
      */
-    private static boolean promptPlayAgain(Scanner scanner) {
+    private static boolean promptPlayAgain() {
         while (true) {
             System.out.print("\nWould you like to try another quiz? (Y/N): ");
-            String input = scanner.nextLine().trim();
-
+            String input = readLine();
+            if (input == null) {
+                return false;
+            }
+            input = input.trim();
             if (input.equalsIgnoreCase("Y") || input.equalsIgnoreCase("YES")) {
                 return true;
             } else if (input.equalsIgnoreCase("N") || input.equalsIgnoreCase("NO")) {
@@ -699,7 +829,8 @@ public class QuizApplication {
         System.out.println("1) Start Quiz");
         System.out.println("2) View Leaderboard");
         System.out.println("3) Instructions");
-        System.out.println("4) Exit");
+        System.out.println("4) Settings (Timer: " + defaultTimeLimitSeconds + "s)");
+        System.out.println("5) Exit");
         System.out.println("-------------------------------------------");
     }
 
@@ -707,50 +838,48 @@ public class QuizApplication {
      * Application entry point.
      */
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
+        System.out.println("=================================================");
+        System.out.println("         WELCOME TO JAVA QUIZ APPLICATION        ");
+        System.out.println("=================================================");
 
-        try {
-            System.out.println("=================================================");
-            System.out.println("         WELCOME TO JAVA QUIZ APPLICATION        ");
-            System.out.println("=================================================");
-
-            boolean running = true;
-            while (running) {
-                displayMainMenu();
-                System.out.print("Select an option (1-4): ");
-                String choice = scanner.nextLine().trim();
-
-                switch (choice) {
-                    case "1" -> {
-                        System.out.println();
-                        String playerName = promptPlayerName(scanner);
-                        boolean playAgain = true;
-                        while (playAgain) {
-                            System.out.println();
-                            Difficulty selectedDifficulty = selectDifficulty(scanner);
-                            System.out.println();
-
-                            Quiz quiz = new Quiz(playerName, selectedDifficulty);
-                            QuizResult result = quiz.start(scanner);
-                            saveResult(result);
-
-                            playAgain = promptPlayAgain(scanner);
-                        }
-                    }
-                    case "2" -> displayLeaderboard();
-                    case "3" -> displayWelcomeAndInstructions();
-                    case "4" -> {
-                        running = false;
-                        System.out.println();
-                        System.out.println("Thank you for taking the Java Quiz. Keep learning and coding!");
-                        System.out.println("Goodbye!");
-                    }
-                    default -> System.out.println("Invalid selection! Please enter a number between 1 and 4.");
-                }
+        boolean running = true;
+        while (running) {
+            displayMainMenu();
+            System.out.print("Select an option (1-5): ");
+            String choice = readLine();
+            if (choice == null) {
+                break;
             }
-        } finally {
-            // Safely close the scanner to release standard input resources
-            scanner.close();
+            choice = choice.trim();
+
+            switch (choice) {
+                case "1" -> {
+                    System.out.println();
+                    String playerName = promptPlayerName();
+                    boolean playAgain = true;
+                    while (playAgain) {
+                        System.out.println();
+                        Difficulty selectedDifficulty = selectDifficulty();
+                        System.out.println();
+
+                        Quiz quiz = new Quiz(playerName, selectedDifficulty, defaultTimeLimitSeconds);
+                        QuizResult result = quiz.start();
+                        saveResult(result);
+
+                        playAgain = promptPlayAgain();
+                    }
+                }
+                case "2" -> displayLeaderboard();
+                case "3" -> displayWelcomeAndInstructions();
+                case "4" -> configureSettings();
+                case "5" -> {
+                    running = false;
+                    System.out.println();
+                    System.out.println("Thank you for taking the Java Quiz. Keep learning and coding!");
+                    System.out.println("Goodbye!");
+                }
+                default -> System.out.println("Invalid selection! Please enter a number between 1 and 5.");
+            }
         }
     }
 }
