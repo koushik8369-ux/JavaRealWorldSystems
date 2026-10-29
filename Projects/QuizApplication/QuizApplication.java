@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.BlockingQueue;
@@ -324,6 +325,22 @@ public class QuizApplication {
      * execution flow, scoring, timer management, and performance summary.
      */
     static class Quiz {
+        private static class PerformanceStats {
+            private int attempted;
+            private int correct;
+
+            private void record(boolean isCorrect) {
+                attempted++;
+                if (isCorrect) {
+                    correct++;
+                }
+            }
+
+            private double getAccuracy() {
+                return attempted == 0 ? 0.0 : ((double) correct / attempted) * 100.0;
+            }
+        }
+
         private static class AnswerReview {
             private final Question question;
             private final Character selectedAnswer;
@@ -346,8 +363,11 @@ public class QuizApplication {
         private final int timeLimitSeconds;
         private final List<Question> questions;
         private final List<AnswerReview> answerReviews;
+        private final EnumMap<Topic, PerformanceStats> topicPerformance;
+        private final EnumMap<Difficulty, PerformanceStats> difficultyPerformance;
         private int correctCount;
         private int incorrectCount;
+        private int unansweredCount;
 
         public Quiz(String playerName, Difficulty difficulty, Topic topic, int timeLimitSeconds) {
             this.playerName = playerName;
@@ -356,6 +376,8 @@ public class QuizApplication {
             this.timeLimitSeconds = timeLimitSeconds;
             this.questions = new ArrayList<>();
             this.answerReviews = new ArrayList<>();
+            this.topicPerformance = new EnumMap<>(Topic.class);
+            this.difficultyPerformance = new EnumMap<>(Difficulty.class);
             loadQuestionsForDifficultyAndTopic(difficulty, topic);
         }
 
@@ -699,7 +721,10 @@ public class QuizApplication {
         public QuizResult start() {
             correctCount = 0;
             incorrectCount = 0;
+            unansweredCount = 0;
             answerReviews.clear();
+            topicPerformance.clear();
+            difficultyPerformance.clear();
 
             if (questions.isEmpty()) {
                 System.out.println("No questions are available for " + topic.getDisplayName()
@@ -730,13 +755,19 @@ public class QuizApplication {
 
                 if (userChoice == null) {
                     answerReviews.add(new AnswerReview(question, null, true));
+                    unansweredCount++;
                     System.out.println("\n>> Time's up! You exceeded the " + timeLimitSeconds + "-second time limit.");
                     System.out.println("   The correct answer was: " 
                         + question.getCorrectOption() + ") " + question.getCorrectOptionText());
                     incorrectCount++;
                 } else {
                     answerReviews.add(new AnswerReview(question, userChoice, false));
-                    if (question.isCorrect(userChoice)) {
+                    boolean isCorrect = question.isCorrect(userChoice);
+                    topicPerformance.computeIfAbsent(question.getTopic(), key -> new PerformanceStats())
+                        .record(isCorrect);
+                    difficultyPerformance.computeIfAbsent(difficulty, key -> new PerformanceStats())
+                        .record(isCorrect);
+                    if (isCorrect) {
                         System.out.println(">> Correct! Well done.");
                         correctCount++;
                     } else {
@@ -882,12 +913,112 @@ public class QuizApplication {
             System.out.println("Time Limit       : " + timeLimitSeconds + "s per question");
             System.out.println("Total Questions  : " + totalQuestions);
             System.out.println("Correct Answers  : " + correctCount);
-            System.out.println("Incorrect Answers: " + incorrectCount);
+            System.out.println("Incorrect Answers: " + (incorrectCount - unansweredCount));
+            System.out.println("Unanswered/Timed Out: " + unansweredCount);
             System.out.printf("Final Score      : %d / %d%n", correctCount, totalQuestions);
-            System.out.printf("Percentage       : %.1f%%%n", percentage);
+            int answeredCount = totalQuestions - unansweredCount;
+            double accuracy = answeredCount == 0 ? 0.0 : ((double) correctCount / answeredCount) * 100.0;
+            System.out.printf("Accuracy         : %.1f%%%n", accuracy);
+            System.out.printf("Score Percentage : %.1f%%%n", percentage);
             System.out.println("-------------------------------------------------");
             System.out.println("Performance      : " + getPerformanceFeedback(percentage));
             System.out.println("=================================================");
+            displayTopicPerformance();
+            displayDifficultyPerformance();
+            displayPerformanceInsights();
+        }
+
+        private void displayTopicPerformance() {
+            System.out.println();
+            System.out.println("TOPIC-WISE PERFORMANCE (ANSWERED QUESTIONS)");
+            for (Topic questionTopic : Topic.values()) {
+                if (questionTopic == Topic.ALL || (topic != Topic.ALL && questionTopic != topic)) {
+                    continue;
+                }
+                PerformanceStats stats = topicPerformance.get(questionTopic);
+                if (stats == null || stats.attempted == 0) {
+                    System.out.printf("%-32s Attempted: 0, Correct: 0, Accuracy: N/A%n",
+                        questionTopic.getDisplayName());
+                } else {
+                    System.out.printf(Locale.US, "%-32s Attempted: %d, Correct: %d, Accuracy: %.1f%%%n",
+                        questionTopic.getDisplayName(), stats.attempted, stats.correct, stats.getAccuracy());
+                }
+            }
+        }
+
+        private void displayDifficultyPerformance() {
+            System.out.println();
+            System.out.println("DIFFICULTY-WISE PERFORMANCE (ANSWERED QUESTIONS)");
+            for (Difficulty questionDifficulty : Difficulty.values()) {
+                if (questionDifficulty != difficulty) {
+                    System.out.printf("%-10s Not attempted%n", questionDifficulty.getDisplayName());
+                    continue;
+                }
+                PerformanceStats stats = difficultyPerformance.get(questionDifficulty);
+                if (stats == null || stats.attempted == 0) {
+                    System.out.printf("%-10s Attempted: 0, Correct: 0, Accuracy: N/A%n",
+                        questionDifficulty.getDisplayName());
+                } else {
+                    System.out.printf(Locale.US, "%-10s Attempted: %d, Correct: %d, Accuracy: %.1f%%%n",
+                        questionDifficulty.getDisplayName(), stats.attempted, stats.correct, stats.getAccuracy());
+                }
+            }
+        }
+
+        private void displayPerformanceInsights() {
+            List<Topic> comparedTopics = new ArrayList<>();
+            for (Topic questionTopic : Topic.values()) {
+                PerformanceStats stats = topicPerformance.get(questionTopic);
+                if (questionTopic != Topic.ALL && stats != null && stats.attempted > 0) {
+                    comparedTopics.add(questionTopic);
+                }
+            }
+
+            System.out.println();
+            System.out.println("PERFORMANCE INSIGHTS");
+            if (comparedTopics.size() < 2) {
+                System.out.println("Not enough answered topic data to compare strengths and improvement areas.");
+                return;
+            }
+
+            double highestAccuracy = -1.0;
+            double lowestAccuracy = 101.0;
+            List<Topic> strongestTopics = new ArrayList<>();
+            List<Topic> improvementTopics = new ArrayList<>();
+            for (Topic questionTopic : comparedTopics) {
+                double accuracy = topicPerformance.get(questionTopic).getAccuracy();
+                if (Double.compare(accuracy, highestAccuracy) > 0) {
+                    highestAccuracy = accuracy;
+                    strongestTopics.clear();
+                    strongestTopics.add(questionTopic);
+                } else if (Double.compare(accuracy, highestAccuracy) == 0) {
+                    strongestTopics.add(questionTopic);
+                }
+                if (Double.compare(accuracy, lowestAccuracy) < 0) {
+                    lowestAccuracy = accuracy;
+                    improvementTopics.clear();
+                    improvementTopics.add(questionTopic);
+                } else if (Double.compare(accuracy, lowestAccuracy) == 0) {
+                    improvementTopics.add(questionTopic);
+                }
+            }
+
+            if (strongestTopics.size() == comparedTopics.size()) {
+                System.out.printf(Locale.US, "All attempted topics are tied at %.1f%% accuracy.%n", highestAccuracy);
+            } else {
+                System.out.printf(Locale.US, "Strongest topic: %s (%.1f%%)%n",
+                    formatTopicNames(strongestTopics), highestAccuracy);
+                System.out.printf(Locale.US, "Improvement area: %s (%.1f%%)%n",
+                    formatTopicNames(improvementTopics), lowestAccuracy);
+            }
+        }
+
+        private String formatTopicNames(List<Topic> topics) {
+            List<String> names = new ArrayList<>();
+            for (Topic questionTopic : topics) {
+                names.add(questionTopic.getDisplayName());
+            }
+            return String.join(", ", names);
         }
 
         /**
