@@ -140,6 +140,7 @@ public class QuizApplication {
     static class QuizResult {
         private final String playerName;
         private final String difficulty;
+        private final String topic;
         private final int correctAnswers;
         private final int totalQuestions;
         private final double percentage;
@@ -147,8 +148,15 @@ public class QuizApplication {
 
         public QuizResult(String playerName, String difficulty, int correctAnswers,
                           int totalQuestions, double percentage, String timestamp) {
+            this(playerName, extractDifficulty(difficulty), extractTopic(difficulty), correctAnswers,
+                 totalQuestions, percentage, timestamp);
+        }
+
+        public QuizResult(String playerName, String difficulty, String topic, int correctAnswers,
+                          int totalQuestions, double percentage, String timestamp) {
             this.playerName = playerName;
             this.difficulty = difficulty;
+            this.topic = topic;
             this.correctAnswers = correctAnswers;
             this.totalQuestions = totalQuestions;
             this.percentage = percentage;
@@ -161,6 +169,14 @@ public class QuizApplication {
 
         public String getDifficulty() {
             return difficulty;
+        }
+
+        public String getTopic() {
+            return topic;
+        }
+
+        public String getDifficultyAndTopic() {
+            return "Not recorded".equals(topic) ? difficulty : difficulty + " (" + topic + ")";
         }
 
         public int getCorrectAnswers() {
@@ -177,6 +193,31 @@ public class QuizApplication {
 
         public String getTimestamp() {
             return timestamp;
+        }
+
+        private static String extractTopic(String difficulty) {
+            if (difficulty == null) {
+                return "Not recorded";
+            }
+            int topicStart = difficulty.lastIndexOf('(');
+            if (topicStart < 0 || !difficulty.endsWith(")")) {
+                return "Not recorded";
+            }
+            String topicName = difficulty.substring(topicStart + 1, difficulty.length() - 1).trim();
+            for (Topic topic : Topic.values()) {
+                if (topic.getDisplayName().equalsIgnoreCase(topicName)) {
+                    return topic.getDisplayName();
+                }
+            }
+            return "Not recorded";
+        }
+
+        private static String extractDifficulty(String difficulty) {
+            String topic = extractTopic(difficulty);
+            if ("Not recorded".equals(topic)) {
+                return difficulty;
+            }
+            return difficulty.substring(0, difficulty.lastIndexOf('(')).trim();
         }
     }
 
@@ -646,12 +687,8 @@ public class QuizApplication {
 
             String timestamp = LocalDateTime.now().format(DATE_FORMATTER);
 
-            // Format difficulty label in CSV: "Easy" if All Topics, or "Easy (Arrays)" if specific topic
-            String difficultyLabel = (topic == Topic.ALL)
-                ? difficulty.getDisplayName()
-                : difficulty.getDisplayName() + " (" + topic.getDisplayName() + ")";
-
-            return new QuizResult(playerName, difficultyLabel, correctCount,
+            return new QuizResult(playerName, difficulty.getDisplayName(),
+                                  topic.getDisplayName(), correctCount,
                                   totalQuestions, percentage, timestamp);
         }
 
@@ -789,6 +826,34 @@ public class QuizApplication {
         return values;
     }
 
+    private static boolean hasValidCsvQuoting(String line) {
+        boolean inQuotes = false;
+        boolean atFieldStart = true;
+        for (int i = 0; i < line.length(); i++) {
+            char current = line.charAt(i);
+            if (current == '"') {
+                if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    i++;
+                } else if (inQuotes) {
+                    inQuotes = false;
+                } else if (atFieldStart) {
+                    inQuotes = true;
+                } else {
+                    return false;
+                }
+            } else if (current == ',' && !inQuotes) {
+                atFieldStart = true;
+            } else if (!inQuotes) {
+                atFieldStart = false;
+            }
+        }
+        return !inQuotes;
+    }
+
+    private static String normalizeHeader(String header) {
+        return header.toLowerCase(Locale.ROOT).replaceAll("[^a-z]", "");
+    }
+
     /**
      * Appends a completed quiz attempt to the persistent CSV results file.
      * Preserves standard 6-column schema for complete backward compatibility.
@@ -803,7 +868,7 @@ public class QuizApplication {
             }
             writer.printf(Locale.US, "%s,%s,%d,%d,%.1f,%s%n",
                 escapeCsvField(result.getPlayerName()),
-                escapeCsvField(result.getDifficulty()),
+                escapeCsvField(result.getDifficultyAndTopic()),
                 result.getCorrectAnswers(),
                 result.getTotalQuestions(),
                 result.getPercentage(),
@@ -828,33 +893,75 @@ public class QuizApplication {
         }
 
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line = reader.readLine(); // Header line
+            String headerLine = reader.readLine();
+            if (headerLine == null || !hasValidCsvQuoting(headerLine)) {
+                return results;
+            }
+            List<String> headers = parseCsvLine(headerLine);
+            int nameIndex = -1;
+            int difficultyIndex = -1;
+            int topicIndex = -1;
+            int correctIndex = -1;
+            int totalIndex = -1;
+            int percentageIndex = -1;
+            int timestampIndex = -1;
+            for (int i = 0; i < headers.size(); i++) {
+                switch (normalizeHeader(headers.get(i))) {
+                    case "playername" -> nameIndex = i;
+                    case "difficulty" -> difficultyIndex = i;
+                    case "topic" -> topicIndex = i;
+                    case "correctanswers" -> correctIndex = i;
+                    case "totalquestions" -> totalIndex = i;
+                    case "percentage" -> percentageIndex = i;
+                    case "datetime", "timestamp" -> timestampIndex = i;
+                    default -> {
+                    }
+                }
+            }
+            if (nameIndex < 0 || difficultyIndex < 0 || correctIndex < 0
+                    || totalIndex < 0 || percentageIndex < 0 || timestampIndex < 0) {
+                System.err.println("Notice: Quiz results file has an unsupported header.");
+                return results;
+            }
+
+            String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
-                if (line.isEmpty()) {
+                if (line.isEmpty() || !hasValidCsvQuoting(line)) {
                     continue;
                 }
                 List<String> tokens = parseCsvLine(line);
-                if (tokens.size() >= 6) {
-                    try {
-                        String name = tokens.get(0);
-                        String difficulty = tokens.get(1);
+                int requiredIndex = Math.max(nameIndex,
+                    Math.max(difficultyIndex, Math.max(correctIndex,
+                    Math.max(totalIndex, Math.max(percentageIndex, timestampIndex)))));
+                if (tokens.size() <= requiredIndex || (topicIndex >= 0 && tokens.size() <= topicIndex)) {
+                    continue;
+                }
+                try {
+                    String name = tokens.get(nameIndex);
+                    String difficulty = tokens.get(difficultyIndex);
+                    String encodedTopic = QuizResult.extractTopic(difficulty);
+                    String topic = topicIndex >= 0 && !tokens.get(topicIndex).isEmpty()
+                        ? tokens.get(topicIndex) : encodedTopic;
+                    int correct = Integer.parseInt(tokens.get(correctIndex));
+                    int total = Integer.parseInt(tokens.get(totalIndex));
+                    double percentage = Double.parseDouble(tokens.get(percentageIndex));
+                    String timestamp = tokens.get(timestampIndex);
 
-                        // Backward-compatible column indices (handles 6-column or 7-column schema)
-                        int correctIndex = (tokens.size() >= 7) ? 3 : 2;
-                        int totalIndex = (tokens.size() >= 7) ? 4 : 3;
-                        int pctIndex = (tokens.size() >= 7) ? 5 : 4;
-                        int timeIndex = (tokens.size() >= 7) ? 6 : 5;
-
-                        int correct = Integer.parseInt(tokens.get(correctIndex));
-                        int total = Integer.parseInt(tokens.get(totalIndex));
-                        double percentage = Double.parseDouble(tokens.get(pctIndex));
-                        String timestamp = tokens.get(timeIndex);
-
-                        results.add(new QuizResult(name, difficulty, correct, total, percentage, timestamp));
-                    } catch (NumberFormatException ignored) {
-                        // Skip malformed records safely
+                    if (name.isEmpty() || difficulty.isEmpty() || total <= 0
+                            || correct < 0 || correct > total || !Double.isFinite(percentage)
+                            || percentage < 0.0 || percentage > 100.0 || timestamp.isEmpty()) {
+                        continue;
                     }
+                    String difficultyLevel = difficulty;
+                    if (!"Not recorded".equals(encodedTopic)) {
+                        int topicStart = difficulty.lastIndexOf('(');
+                        difficultyLevel = difficulty.substring(0, topicStart).trim();
+                    }
+                    results.add(new QuizResult(name, difficultyLevel, topic, correct, total,
+                                               percentage, timestamp));
+                } catch (NumberFormatException ignored) {
+                    // Skip malformed numeric records while retaining valid attempts.
                 }
             }
         } catch (IOException e) {
@@ -862,6 +969,66 @@ public class QuizApplication {
         }
 
         return results;
+    }
+
+    private static List<QuizResult> findPlayerResults(String playerName) {
+        List<QuizResult> matches = new ArrayList<>();
+        for (QuizResult result : loadResults()) {
+            if (result.getPlayerName().equalsIgnoreCase(playerName.trim())) {
+                matches.add(result);
+            }
+        }
+        return matches;
+    }
+
+    private static void displayQuizHistory(String playerName) {
+        List<QuizResult> results = findPlayerResults(playerName);
+        System.out.println();
+        System.out.println("QUIZ HISTORY FOR " + (results.isEmpty()
+            ? playerName : results.get(0).getPlayerName()));
+        if (results.isEmpty()) {
+            System.out.println("No saved quiz attempts found for this player.");
+            return;
+        }
+        System.out.printf("%-18s %-14s %-32s %-28s %-10s %-8s %-12s%n",
+            "Player", "Date/Time", "Topic", "Difficulty", "Correct", "Total", "Percentage");
+        for (QuizResult result : results) {
+            System.out.printf("%-18s %-14s %-32s %-28s %-10d %-8d %.1f%%%n",
+                result.getPlayerName(), result.getTimestamp(), result.getTopic(), result.getDifficulty(),
+                result.getCorrectAnswers(), result.getTotalQuestions(), result.getPercentage());
+        }
+    }
+
+    private static void displayPlayerStatistics(String playerName) {
+        List<QuizResult> results = findPlayerResults(playerName);
+        System.out.println();
+        System.out.println("PLAYER STATISTICS FOR " + playerName);
+        if (results.isEmpty()) {
+            System.out.println("No saved quiz attempts found for this player.");
+            return;
+        }
+
+        double percentageTotal = 0.0;
+        double highestPercentage = 0.0;
+        long questionsAnswered = 0;
+        long correctAnswers = 0;
+        for (QuizResult result : results) {
+            percentageTotal += result.getPercentage();
+            highestPercentage = Math.max(highestPercentage, result.getPercentage());
+            questionsAnswered += result.getTotalQuestions();
+            correctAnswers += result.getCorrectAnswers();
+        }
+        double averagePercentage = percentageTotal / results.size();
+        double accuracy = questionsAnswered == 0
+            ? 0.0 : ((double) correctAnswers / questionsAnswered) * 100.0;
+
+        System.out.println("Player Name              : " + results.get(0).getPlayerName());
+        System.out.println("Total Attempts            : " + results.size());
+        System.out.printf(Locale.US, "Average Percentage        : %.1f%%%n", averagePercentage);
+        System.out.printf(Locale.US, "Highest Percentage        : %.1f%%%n", highestPercentage);
+        System.out.println("Total Questions Answered  : " + questionsAnswered);
+        System.out.println("Total Correct Answers     : " + correctAnswers);
+        System.out.printf(Locale.US, "Accuracy Percentage       : %.1f%%%n", accuracy);
     }
 
     /**
@@ -901,7 +1068,7 @@ public class QuizApplication {
             if (displayName.length() > 20) {
                 displayName = displayName.substring(0, 17) + "...";
             }
-            String diffTopic = r.getDifficulty();
+            String diffTopic = r.getDifficultyAndTopic();
             if (diffTopic.length() > 24) {
                 diffTopic = diffTopic.substring(0, 21) + "...";
             }
@@ -1094,9 +1261,11 @@ public class QuizApplication {
         System.out.println("\n---------------- MAIN MENU ----------------");
         System.out.println("1) Start Quiz");
         System.out.println("2) View Leaderboard");
-        System.out.println("3) Instructions");
-        System.out.println("4) Settings (Timer: " + defaultTimeLimitSeconds + "s)");
-        System.out.println("5) Exit");
+        System.out.println("3) Quiz History");
+        System.out.println("4) Player Statistics");
+        System.out.println("5) Instructions");
+        System.out.println("6) Settings (Timer: " + defaultTimeLimitSeconds + "s)");
+        System.out.println("7) Exit");
         System.out.println("-------------------------------------------");
     }
 
@@ -1111,7 +1280,7 @@ public class QuizApplication {
         boolean running = true;
         while (running) {
             displayMainMenu();
-            System.out.print("Select an option (1-5): ");
+            System.out.print("Select an option (1-7): ");
             String choice = readLine();
             if (choice == null) {
                 break;
@@ -1140,15 +1309,17 @@ public class QuizApplication {
                     }
                 }
                 case "2" -> displayLeaderboard();
-                case "3" -> displayWelcomeAndInstructions();
-                case "4" -> configureSettings();
-                case "5" -> {
+                case "3" -> displayQuizHistory(promptPlayerName());
+                case "4" -> displayPlayerStatistics(promptPlayerName());
+                case "5" -> displayWelcomeAndInstructions();
+                case "6" -> configureSettings();
+                case "7" -> {
                     running = false;
                     System.out.println();
                     System.out.println("Thank you for taking the Java Quiz. Keep learning and coding!");
                     System.out.println("Goodbye!");
                 }
-                default -> System.out.println("Invalid selection! Please enter a number between 1 and 5.");
+                default -> System.out.println("Invalid selection! Please enter a number between 1 and 7.");
             }
         }
     }
