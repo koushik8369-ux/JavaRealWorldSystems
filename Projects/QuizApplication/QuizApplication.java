@@ -8,6 +8,7 @@ import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.BlockingQueue;
@@ -269,8 +270,27 @@ public class QuizApplication {
             int answerIndex = Character.toUpperCase(correctOption) - 'A';
             String answer = answerIndex >= 0 && answerIndex < options.length
                 ? options[answerIndex] : "the correct option";
-            return "The Java answer is " + Character.toUpperCase(correctOption) + ") " + answer
-                + ", which answers: " + questionText;
+            return "The correct answer is " + answer + ", which answers: " + questionText;
+        }
+
+        private Question shuffledCopy() {
+            List<Integer> optionOrder = new ArrayList<>();
+            for (int i = 0; i < options.length; i++) {
+                optionOrder.add(i);
+            }
+            Collections.shuffle(optionOrder);
+
+            String[] shuffledOptions = new String[options.length];
+            char shuffledCorrectOption = 'A';
+            int originalCorrectIndex = correctOption - 'A';
+            for (int i = 0; i < optionOrder.size(); i++) {
+                int originalIndex = optionOrder.get(i);
+                shuffledOptions[i] = options[originalIndex];
+                if (originalIndex == originalCorrectIndex) {
+                    shuffledCorrectOption = (char) ('A' + i);
+                }
+            }
+            return new Question(topic, questionText, shuffledOptions, shuffledCorrectOption, explanation);
         }
 
         public String getCorrectOptionText() {
@@ -686,6 +706,11 @@ public class QuizApplication {
                     + " at the " + difficulty.getDisplayName()
                     + " level. Please choose another topic or difficulty.");
                 return null;
+            }
+
+            Collections.shuffle(questions);
+            for (int i = 0; i < questions.size(); i++) {
+                questions.set(i, questions.get(i).shuffledCopy());
             }
 
             System.out.println("=================================================");
