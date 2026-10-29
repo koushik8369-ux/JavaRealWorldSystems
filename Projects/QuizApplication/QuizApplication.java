@@ -229,12 +229,20 @@ public class QuizApplication {
         private final String questionText;
         private final String[] options;
         private final char correctOption; // 'A', 'B', 'C', or 'D'
+        private final String explanation;
 
         public Question(Topic topic, String questionText, String[] options, char correctOption) {
+            this(topic, questionText, options, correctOption,
+                 buildExplanation(questionText, options, correctOption));
+        }
+
+        public Question(Topic topic, String questionText, String[] options, char correctOption,
+                        String explanation) {
             this.topic = topic;
             this.questionText = questionText;
             this.options = options;
             this.correctOption = Character.toUpperCase(correctOption);
+            this.explanation = explanation;
         }
 
         public Topic getTopic() {
@@ -251,6 +259,18 @@ public class QuizApplication {
 
         public char getCorrectOption() {
             return correctOption;
+        }
+
+        public String getExplanation() {
+            return explanation;
+        }
+
+        private static String buildExplanation(String questionText, String[] options, char correctOption) {
+            int answerIndex = Character.toUpperCase(correctOption) - 'A';
+            String answer = answerIndex >= 0 && answerIndex < options.length
+                ? options[answerIndex] : "the correct option";
+            return "The Java answer is " + Character.toUpperCase(correctOption) + ") " + answer
+                + ", which answers: " + questionText;
         }
 
         public String getCorrectOptionText() {
@@ -284,11 +304,28 @@ public class QuizApplication {
      * execution flow, scoring, timer management, and performance summary.
      */
     static class Quiz {
+        private static class AnswerReview {
+            private final Question question;
+            private final Character selectedAnswer;
+            private final boolean timedOut;
+
+            private AnswerReview(Question question, Character selectedAnswer, boolean timedOut) {
+                this.question = question;
+                this.selectedAnswer = selectedAnswer;
+                this.timedOut = timedOut;
+            }
+
+            private boolean needsReview() {
+                return timedOut || selectedAnswer == null || !question.isCorrect(selectedAnswer);
+            }
+        }
+
         private final String playerName;
         private final Difficulty difficulty;
         private final Topic topic;
         private final int timeLimitSeconds;
         private final List<Question> questions;
+        private final List<AnswerReview> answerReviews;
         private int correctCount;
         private int incorrectCount;
 
@@ -298,6 +335,7 @@ public class QuizApplication {
             this.topic = topic;
             this.timeLimitSeconds = timeLimitSeconds;
             this.questions = new ArrayList<>();
+            this.answerReviews = new ArrayList<>();
             loadQuestionsForDifficultyAndTopic(difficulty, topic);
         }
 
@@ -641,6 +679,7 @@ public class QuizApplication {
         public QuizResult start() {
             correctCount = 0;
             incorrectCount = 0;
+            answerReviews.clear();
 
             if (questions.isEmpty()) {
                 System.out.println("No questions are available for " + topic.getDisplayName()
@@ -665,11 +704,13 @@ public class QuizApplication {
                 Character userChoice = promptForTimedOption(timeLimitSeconds);
 
                 if (userChoice == null) {
+                    answerReviews.add(new AnswerReview(question, null, true));
                     System.out.println("\n>> Time's up! You exceeded the " + timeLimitSeconds + "-second time limit.");
                     System.out.println("   The correct answer was: " 
                         + question.getCorrectOption() + ") " + question.getCorrectOptionText());
                     incorrectCount++;
                 } else {
+                    answerReviews.add(new AnswerReview(question, userChoice, false));
                     if (question.isCorrect(userChoice)) {
                         System.out.println(">> Correct! Well done.");
                         correctCount++;
@@ -684,12 +725,76 @@ public class QuizApplication {
 
             double percentage = ((double) correctCount / totalQuestions) * 100.0;
             displayResults(totalQuestions, percentage);
+            displayAnswerReview();
 
             String timestamp = LocalDateTime.now().format(DATE_FORMATTER);
 
             return new QuizResult(playerName, difficulty.getDisplayName(),
                                   topic.getDisplayName(), correctCount,
                                   totalQuestions, percentage, timestamp);
+        }
+
+        private void displayAnswerReview() {
+            List<AnswerReview> incorrectAnswers = new ArrayList<>();
+            for (AnswerReview answer : answerReviews) {
+                if (answer.needsReview()) {
+                    incorrectAnswers.add(answer);
+                }
+            }
+
+            System.out.println();
+            System.out.println("==================== REVIEW ANSWERS ====================");
+            if (incorrectAnswers.isEmpty()) {
+                System.out.println("Congratulations! Every answer was correct.");
+                System.out.println("=========================================================");
+                return;
+            }
+
+            for (int i = 0; i < incorrectAnswers.size(); i++) {
+                AnswerReview answer = incorrectAnswers.get(i);
+                Question question = answer.question;
+                System.out.println("Question " + (i + 1) + ": " + question.getQuestionText());
+                if (answer.timedOut || answer.selectedAnswer == null) {
+                    System.out.println("Your answer     : Not answered (time expired)");
+                } else {
+                    int selectedIndex = answer.selectedAnswer - 'A';
+                    System.out.println("Your answer     : " + answer.selectedAnswer + ") "
+                        + question.getOptions()[selectedIndex]);
+                }
+                System.out.println("Correct answer  : " + question.getCorrectOption() + ") "
+                    + question.getCorrectOptionText());
+                System.out.println("Topic           : " + question.getTopic().getDisplayName());
+                System.out.println("Difficulty      : " + difficulty.getDisplayName());
+                System.out.println();
+            }
+            System.out.println("=========================================================");
+
+            if (promptReviewExplanations()) {
+                System.out.println("==================== EXPLANATIONS ======================");
+                for (int i = 0; i < incorrectAnswers.size(); i++) {
+                    AnswerReview answer = incorrectAnswers.get(i);
+                    System.out.println((i + 1) + ". " + answer.question.getExplanation());
+                }
+                System.out.println("=========================================================");
+            }
+        }
+
+        private boolean promptReviewExplanations() {
+            while (true) {
+                System.out.print("Would you like to review explanations? (Y/N): ");
+                String input = readLine();
+                if (input == null) {
+                    return false;
+                }
+                input = input.trim();
+                if (input.equalsIgnoreCase("Y") || input.equalsIgnoreCase("YES")) {
+                    return true;
+                }
+                if (input.equalsIgnoreCase("N") || input.equalsIgnoreCase("NO")) {
+                    return false;
+                }
+                System.out.println("Invalid choice! Please enter 'Y' for Yes or 'N' for No.");
+            }
         }
 
         /**
