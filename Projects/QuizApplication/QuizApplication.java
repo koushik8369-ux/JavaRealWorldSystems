@@ -796,6 +796,147 @@ public class QuizApplication {
                                   totalQuestions, percentage, timestamp);
         }
 
+        private void displayPlayerProgress(QuizResult currentResult) {
+            File historyFile = getResultsFile();
+            if (historyFile.exists() && (!historyFile.isFile() || !historyFile.canRead())) {
+                System.err.println("Notice: Cannot read quiz history; player progress and achievements were not updated.");
+                return;
+            }
+
+            List<QuizResult> previousAttempts = new ArrayList<>();
+            for (QuizResult result : loadResults()) {
+                if (result.getPlayerName().equalsIgnoreCase(playerName)) {
+                    previousAttempts.add(result);
+                }
+            }
+
+            System.out.println();
+            System.out.println("==================== PLAYER PROGRESS ====================");
+            displayPersonalBest(previousAttempts, currentResult);
+            displayPreviousAttemptComparison(previousAttempts, currentResult);
+            displayNewAchievements(previousAttempts, currentResult);
+            System.out.println("=========================================================");
+        }
+
+        private void displayPersonalBest(List<QuizResult> previousAttempts, QuizResult currentResult) {
+            QuizResult personalBest = null;
+            for (QuizResult attempt : previousAttempts) {
+                if (isBetterResult(attempt, personalBest)) {
+                    personalBest = attempt;
+                }
+            }
+            if (isBetterResult(currentResult, personalBest)) {
+                personalBest = currentResult;
+            }
+
+            System.out.println("PERSONAL BEST");
+            if (personalBest == null) {
+                System.out.println("No completed attempts are available yet.");
+                return;
+            }
+            System.out.printf(Locale.US, "Best score: %d / %d | Accuracy: %.1f%% | Attempt date: %s%n",
+                personalBest.getCorrectAnswers(), personalBest.getTotalQuestions(),
+                personalBest.getPercentage(), personalBest.getTimestamp());
+            System.out.println("Tie-break: higher percentage, then more correct answers, then earliest saved attempt.");
+        }
+
+        private boolean isBetterResult(QuizResult candidate, QuizResult currentBest) {
+            if (currentBest == null) {
+                return true;
+            }
+            int percentageComparison = Double.compare(candidate.getPercentage(), currentBest.getPercentage());
+            if (percentageComparison != 0) {
+                return percentageComparison > 0;
+            }
+            return candidate.getCorrectAnswers() > currentBest.getCorrectAnswers();
+        }
+
+        private void displayPreviousAttemptComparison(List<QuizResult> previousAttempts,
+                                                      QuizResult currentResult) {
+            System.out.println();
+            System.out.println("PREVIOUS ATTEMPT COMPARISON");
+            if (previousAttempts.isEmpty()) {
+                System.out.println("This is your first completed quiz. Keep building your progress!");
+                return;
+            }
+
+            QuizResult previousAttempt = null;
+            for (QuizResult attempt : previousAttempts) {
+                if (isCompatibleAttempt(attempt, currentResult)) {
+                    previousAttempt = attempt;
+                }
+            }
+            boolean sameConfiguration = previousAttempt != null;
+            if (previousAttempt == null) {
+                previousAttempt = previousAttempts.get(previousAttempts.size() - 1);
+            }
+
+            double change = currentResult.getPercentage() - previousAttempt.getPercentage();
+            System.out.printf(Locale.US, "Previous accuracy: %.1f%% (%s)%n",
+                previousAttempt.getPercentage(), previousAttempt.getTimestamp());
+            System.out.printf(Locale.US, "Current accuracy : %.1f%%%n", currentResult.getPercentage());
+            System.out.printf(Locale.US, "Difference       : %+.1f percentage points%n", change);
+            System.out.println("Comparison basis : recorded score percentage (correct answers / total questions; timeouts count as incorrect).");
+            if (sameConfiguration) {
+                System.out.println("Configuration    : same topic and difficulty (" + currentResult.getTopic()
+                    + ", " + currentResult.getDifficulty() + ").");
+            } else {
+                System.out.println("Configuration    : no earlier attempt matched this topic and difficulty; comparing with the latest attempt across configurations.");
+            }
+
+            if (change > 0.0) {
+                System.out.println("Result           : Improvement");
+            } else if (change < 0.0) {
+                System.out.println("Result           : Decline");
+            } else {
+                System.out.println("Result           : No change");
+            }
+        }
+
+        private boolean isCompatibleAttempt(QuizResult previousAttempt, QuizResult currentResult) {
+            return previousAttempt.getDifficulty().equalsIgnoreCase(currentResult.getDifficulty())
+                && previousAttempt.getTopic().equalsIgnoreCase(currentResult.getTopic());
+        }
+
+        private void displayNewAchievements(List<QuizResult> previousAttempts, QuizResult currentResult) {
+            List<String> achievements = new ArrayList<>();
+            if (previousAttempts.isEmpty()) {
+                achievements.add("First completed quiz");
+            }
+
+            boolean alreadyPerfect = false;
+            for (QuizResult attempt : previousAttempts) {
+                if (attempt.getPercentage() >= 100.0) {
+                    alreadyPerfect = true;
+                    break;
+                }
+            }
+            if (currentResult.getPercentage() >= 100.0 && !alreadyPerfect) {
+                achievements.add("Perfect score");
+            }
+            if (previousAttempts.size() < 10 && previousAttempts.size() + 1 >= 10) {
+                achievements.add("10 completed quizzes");
+            }
+
+            double previousBest = -1.0;
+            for (QuizResult attempt : previousAttempts) {
+                previousBest = Math.max(previousBest, attempt.getPercentage());
+            }
+            if (currentResult.getPercentage() > previousBest) {
+                achievements.add("Personal best achieved");
+            }
+
+            System.out.println();
+            System.out.println("NEW ACHIEVEMENTS");
+            if (achievements.isEmpty()) {
+                System.out.println("No new achievements this time. Keep practicing!");
+            } else {
+                for (String achievement : achievements) {
+                    System.out.println("* " + achievement);
+                }
+            }
+        }
+
         private void offerReportExport() {
             if (!confirmReportExport("Would you like to save a detailed quiz report? (Y/N): ")) {
                 return;
@@ -1793,6 +1934,7 @@ public class QuizApplication {
                         Quiz quiz = new Quiz(playerName, selectedDifficulty, selectedTopic, defaultTimeLimitSeconds);
                         QuizResult result = quiz.start();
                         if (result != null) {
+                            quiz.displayPlayerProgress(result);
                             saveResult(result);
                             quiz.offerReportExport();
                         }
