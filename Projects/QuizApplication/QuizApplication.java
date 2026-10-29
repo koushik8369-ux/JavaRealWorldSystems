@@ -601,6 +601,13 @@ public class QuizApplication {
             correctCount = 0;
             incorrectCount = 0;
 
+            if (questions.isEmpty()) {
+                System.out.println("No questions are available for " + topic.getDisplayName()
+                    + " at the " + difficulty.getDisplayName()
+                    + " level. Please choose another topic or difficulty.");
+                return null;
+            }
+
             System.out.println("=================================================");
             System.out.println("     QUIZ IN PROGRESS [" + difficulty.getDisplayName().toUpperCase() + " LEVEL]");
             System.out.println("     Topic : " + topic.getDisplayName());
@@ -944,24 +951,38 @@ public class QuizApplication {
             if (input == null) {
                 return Topic.ALL;
             }
-            input = input.trim().toUpperCase();
-
-            if (input.equals("1") || input.contains("ALL")) {
-                return Topic.ALL;
-            } else if (input.equals("2") || input.contains("FUNDAMENTAL")) {
-                return Topic.FUNDAMENTALS;
-            } else if (input.equals("3") || input.contains("OOP") || input.contains("OBJECT")) {
-                return Topic.OOP;
-            } else if (input.equals("4") || input.contains("ARRAY")) {
-                return Topic.ARRAYS;
-            } else if (input.equals("5") || input.contains("STRING")) {
-                return Topic.STRINGS;
-            } else if (input.equals("6") || input.contains("COLLECTION")) {
-                return Topic.COLLECTIONS;
-            } else if (input.equals("7") || input.contains("EXCEPTION")) {
-                return Topic.EXCEPTIONS;
-            } else {
-                System.out.println("Invalid choice! Please enter a number from 1 to 7 or the topic name.");
+            String choice = input.trim().toUpperCase(Locale.ROOT);
+            switch (choice) {
+                case "1":
+                case "ALL":
+                case "ALL TOPICS":
+                    return Topic.ALL;
+                case "2":
+                case "FUNDAMENTALS":
+                case "JAVA FUNDAMENTALS":
+                    return Topic.FUNDAMENTALS;
+                case "3":
+                case "OOP":
+                case "OBJECT-ORIENTED PROGRAMMING":
+                case "OBJECT ORIENTED PROGRAMMING":
+                case "OBJECT-ORIENTED PROGRAMMING (OOP)":
+                    return Topic.OOP;
+                case "4":
+                case "ARRAYS":
+                    return Topic.ARRAYS;
+                case "5":
+                case "STRINGS":
+                    return Topic.STRINGS;
+                case "6":
+                case "COLLECTIONS":
+                case "COLLECTIONS FRAMEWORK":
+                    return Topic.COLLECTIONS;
+                case "7":
+                case "EXCEPTIONS":
+                case "EXCEPTION HANDLING":
+                    return Topic.EXCEPTIONS;
+                default:
+                    System.out.println("Invalid choice! Please enter a number from 1 to 7 or the topic name.");
             }
         }
     }
@@ -1111,7 +1132,9 @@ public class QuizApplication {
 
                         Quiz quiz = new Quiz(playerName, selectedDifficulty, selectedTopic, defaultTimeLimitSeconds);
                         QuizResult result = quiz.start();
-                        saveResult(result);
+                        if (result != null) {
+                            saveResult(result);
+                        }
 
                         playAgain = promptPlayAgain();
                     }
