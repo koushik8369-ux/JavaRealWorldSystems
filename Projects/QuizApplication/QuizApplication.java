@@ -1,3 +1,4 @@
+import java.io.BufferedWriter;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -5,6 +6,11 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -790,6 +796,230 @@ public class QuizApplication {
                                   totalQuestions, percentage, timestamp);
         }
 
+        private void offerReportExport() {
+            if (!confirmReportExport("Would you like to save a detailed quiz report? (Y/N): ")) {
+                return;
+            }
+            if (!confirmReportExport("Confirm saving this report? (Y/N): ")) {
+                System.out.println("Report was not saved.");
+                return;
+            }
+
+            Path report = saveReport(Path.of("quiz-reports"), LocalDateTime.now());
+            if (report != null) {
+                System.out.println(">> Quiz report saved to: " + report.toAbsolutePath());
+            }
+        }
+
+        private boolean confirmReportExport(String prompt) {
+            while (true) {
+                System.out.print(prompt);
+                String input = readLine();
+                if (input == null) {
+                    return false;
+                }
+                input = input.trim();
+                if (input.equalsIgnoreCase("Y") || input.equalsIgnoreCase("YES")) {
+                    return true;
+                }
+                if (input.equalsIgnoreCase("N") || input.equalsIgnoreCase("NO")) {
+                    return false;
+                }
+                System.out.println("Invalid choice! Please enter 'Y' for Yes or 'N' for No.");
+            }
+        }
+
+        private Path saveReport(Path reportDirectory, LocalDateTime generatedAt) {
+            String filenamePlayer = safePlayerFileComponent(playerName);
+            String timestamp = generatedAt.format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS"));
+            String baseName = filenamePlayer + "-" + timestamp;
+            String reportContents = buildReportContents(generatedAt);
+            try {
+                Files.createDirectories(reportDirectory);
+                for (int suffix = 0; ; suffix++) {
+                    String filename = baseName + (suffix == 0 ? "" : "-" + suffix) + ".txt";
+                    Path reportFile = reportDirectory.resolve(filename);
+                    try (BufferedWriter writer = Files.newBufferedWriter(reportFile,
+                            StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+                        writer.write(reportContents);
+                        return reportFile;
+                    } catch (FileAlreadyExistsException e) {
+                        // Keep the existing report and try a fresh suffix.
+                    } catch (IOException e) {
+                        try {
+                            Files.deleteIfExists(reportFile);
+                        } catch (IOException | SecurityException cleanupError) {
+                            e.addSuppressed(cleanupError);
+                        }
+                        throw e;
+                    }
+                }
+            } catch (IOException | SecurityException e) {
+                System.err.println("Warning: Unable to save quiz report: " + e.getMessage());
+                return null;
+            }
+        }
+
+        private String safePlayerFileComponent(String name) {
+            String safeName = name.replaceAll("[^A-Za-z0-9_-]", "_")
+                .replaceAll("_+", "_").replaceAll("-+", "-");
+            safeName = safeName.replaceAll("^[_-]+|[_-]+$", "");
+            if (safeName.isEmpty()) {
+                safeName = "Player";
+            } else if (safeName.length() > 40) {
+                safeName = safeName.substring(0, 40);
+            }
+            if (safeName.matches("(?i)CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]")) {
+                safeName = "Player-" + safeName;
+            }
+            return safeName;
+        }
+
+        private String buildReportContents(LocalDateTime generatedAt) {
+            int totalQuestions = answerReviews.size();
+            int incorrectAnswers = incorrectCount - unansweredCount;
+            int answeredCount = totalQuestions - unansweredCount;
+            double scorePercentage = totalQuestions == 0
+                ? 0.0 : ((double) correctCount / totalQuestions) * 100.0;
+            double accuracy = answeredCount == 0
+                ? 0.0 : ((double) correctCount / answeredCount) * 100.0;
+            StringBuilder report = new StringBuilder();
+
+            report.append("QUIZ PERFORMANCE REPORT\n");
+            report.append("=======================\n");
+            report.append("Player: ").append(playerName).append('\n');
+            report.append("Generated: ").append(generatedAt.format(DATE_FORMATTER)).append('\n');
+            report.append("Topic: ").append(topic.getDisplayName()).append('\n');
+            report.append("Difficulty: ").append(difficulty.getDisplayName()).append('\n');
+            report.append("Questions: ").append(totalQuestions).append('\n');
+            report.append("Correct answers: ").append(correctCount).append('\n');
+            report.append("Incorrect answers: ").append(incorrectAnswers).append('\n');
+            report.append("Unanswered/timed out: ").append(unansweredCount).append('\n');
+            report.append("Final score: ").append(correctCount).append(" / ").append(totalQuestions).append('\n');
+            report.append(String.format(Locale.US, "Score percentage: %.1f%%%n", scorePercentage));
+            report.append(String.format(Locale.US, "Accuracy (answered questions): %.1f%%%n", accuracy));
+            report.append("Performance: ").append(getPerformanceFeedback(scorePercentage)).append("\n\n");
+
+            appendTopicAnalytics(report);
+            appendDifficultyAnalytics(report);
+            appendPerformanceInsights(report);
+            appendQuestionDetails(report);
+            return report.toString();
+        }
+
+        private void appendTopicAnalytics(StringBuilder report) {
+            report.append("TOPIC-WISE PERFORMANCE (ANSWERED QUESTIONS)\n");
+            for (Topic questionTopic : Topic.values()) {
+                if (questionTopic == Topic.ALL || (topic != Topic.ALL && questionTopic != topic)) {
+                    continue;
+                }
+                PerformanceStats stats = topicPerformance.get(questionTopic);
+                if (stats == null || stats.attempted == 0) {
+                    report.append(questionTopic.getDisplayName())
+                        .append(": Attempted 0, Correct 0, Accuracy N/A\n");
+                } else {
+                    report.append(String.format(Locale.US, "%s: Attempted %d, Correct %d, Accuracy %.1f%%%n",
+                        questionTopic.getDisplayName(), stats.attempted, stats.correct, stats.getAccuracy()));
+                }
+            }
+            report.append('\n');
+        }
+
+        private void appendDifficultyAnalytics(StringBuilder report) {
+            report.append("DIFFICULTY-WISE PERFORMANCE (ANSWERED QUESTIONS)\n");
+            for (Difficulty questionDifficulty : Difficulty.values()) {
+                if (questionDifficulty != difficulty) {
+                    report.append(questionDifficulty.getDisplayName()).append(": Not attempted\n");
+                    continue;
+                }
+                PerformanceStats stats = difficultyPerformance.get(questionDifficulty);
+                if (stats == null || stats.attempted == 0) {
+                    report.append(questionDifficulty.getDisplayName())
+                        .append(": Attempted 0, Correct 0, Accuracy N/A\n");
+                } else {
+                    report.append(String.format(Locale.US, "%s: Attempted %d, Correct %d, Accuracy %.1f%%%n",
+                        questionDifficulty.getDisplayName(), stats.attempted, stats.correct, stats.getAccuracy()));
+                }
+            }
+            report.append('\n');
+        }
+
+        private void appendPerformanceInsights(StringBuilder report) {
+            List<Topic> comparedTopics = new ArrayList<>();
+            for (Topic questionTopic : Topic.values()) {
+                PerformanceStats stats = topicPerformance.get(questionTopic);
+                if (questionTopic != Topic.ALL && stats != null && stats.attempted > 0) {
+                    comparedTopics.add(questionTopic);
+                }
+            }
+
+            report.append("PERFORMANCE INSIGHTS\n");
+            if (comparedTopics.size() < 2) {
+                report.append("Not enough answered topic data to compare strengths and improvement areas.\n\n");
+                return;
+            }
+
+            double highestAccuracy = -1.0;
+            double lowestAccuracy = 101.0;
+            List<Topic> strongestTopics = new ArrayList<>();
+            List<Topic> improvementTopics = new ArrayList<>();
+            for (Topic questionTopic : comparedTopics) {
+                double accuracy = topicPerformance.get(questionTopic).getAccuracy();
+                if (Double.compare(accuracy, highestAccuracy) > 0) {
+                    highestAccuracy = accuracy;
+                    strongestTopics.clear();
+                    strongestTopics.add(questionTopic);
+                } else if (Double.compare(accuracy, highestAccuracy) == 0) {
+                    strongestTopics.add(questionTopic);
+                }
+                if (Double.compare(accuracy, lowestAccuracy) < 0) {
+                    lowestAccuracy = accuracy;
+                    improvementTopics.clear();
+                    improvementTopics.add(questionTopic);
+                } else if (Double.compare(accuracy, lowestAccuracy) == 0) {
+                    improvementTopics.add(questionTopic);
+                }
+            }
+            if (strongestTopics.size() == comparedTopics.size()) {
+                report.append(String.format(Locale.US, "All attempted topics are tied at %.1f%% accuracy.%n%n",
+                    highestAccuracy));
+            } else {
+                report.append(String.format(Locale.US, "Strongest topic: %s (%.1f%%)%n",
+                    formatTopicNames(strongestTopics), highestAccuracy));
+                report.append(String.format(Locale.US, "Improvement area: %s (%.1f%%)%n%n",
+                    formatTopicNames(improvementTopics), lowestAccuracy));
+            }
+        }
+
+        private void appendQuestionDetails(StringBuilder report) {
+            report.append("QUESTION DETAILS\n");
+            for (int i = 0; i < answerReviews.size(); i++) {
+                AnswerReview answer = answerReviews.get(i);
+                Question question = answer.question;
+                report.append("\nQuestion ").append(i + 1).append(": ")
+                    .append(question.getQuestionText()).append('\n');
+                report.append("Topic: ").append(question.getTopic().getDisplayName()).append('\n');
+                report.append("Difficulty: ").append(difficulty.getDisplayName()).append('\n');
+                report.append("Options shown:\n");
+                for (int optionIndex = 0; optionIndex < question.getOptions().length; optionIndex++) {
+                    report.append("  ").append((char) ('A' + optionIndex)).append(") ")
+                        .append(question.getOptions()[optionIndex]).append('\n');
+                }
+                if (answer.timedOut || answer.selectedAnswer == null) {
+                    report.append("Player answer: Not answered (time expired)\n");
+                } else {
+                    int selectedIndex = answer.selectedAnswer - 'A';
+                    report.append("Player answer: ").append(answer.selectedAnswer).append(") ")
+                        .append(question.getOptions()[selectedIndex]).append('\n');
+                }
+                report.append("Correct answer: ").append(question.getCorrectOption()).append(") ")
+                    .append(question.getCorrectOptionText()).append('\n');
+                if (question.getExplanation() != null && !question.getExplanation().trim().isEmpty()) {
+                    report.append("Explanation: ").append(question.getExplanation()).append('\n');
+                }
+            }
+        }
+
         private void displayAnswerReview() {
             List<AnswerReview> incorrectAnswers = new ArrayList<>();
             for (AnswerReview answer : answerReviews) {
@@ -1564,6 +1794,7 @@ public class QuizApplication {
                         QuizResult result = quiz.start();
                         if (result != null) {
                             saveResult(result);
+                            quiz.offerReportExport();
                         }
 
                         playAgain = promptPlayAgain();
