@@ -379,6 +379,8 @@ public class QuizApplication {
         private int correctCount;
         private int incorrectCount;
         private int unansweredCount;
+        private int currentStreak;
+        private int highestStreak;
 
         public Quiz(String playerName, Difficulty difficulty, Topic topic, int timeLimitSeconds) {
             this.playerName = playerName;
@@ -749,6 +751,8 @@ public class QuizApplication {
             int practicedCount = 0;
             int practiceCorrectCount = 0;
             int practiceIncorrectCount = 0;
+            int currentPracticeStreak = 0;
+            int highestPracticeStreak = 0;
             EnumMap<Topic, Integer> practicedTopics = new EnumMap<>(Topic.class);
             for (int i = 0; i < questions.size(); i++) {
                 Question question = questions.get(i);
@@ -766,10 +770,14 @@ public class QuizApplication {
                 if (question.isCorrect(userChoice)) {
                     System.out.println(">> Correct!");
                     practiceCorrectCount++;
+                    currentPracticeStreak++;
+                    highestPracticeStreak = Math.max(highestPracticeStreak, currentPracticeStreak);
                 } else {
                     System.out.println(">> Incorrect!");
                     practiceIncorrectCount++;
+                    currentPracticeStreak = 0;
                 }
+                System.out.println("   Current streak: " + currentPracticeStreak);
                 System.out.println("   Correct answer: " + question.getCorrectOption()
                     + ") " + question.getCorrectOptionText());
                 String explanation = question.getExplanation();
@@ -786,6 +794,7 @@ public class QuizApplication {
             System.out.println("Correct answers          : " + practiceCorrectCount);
             System.out.println("Incorrect answers        : " + practiceIncorrectCount);
             System.out.printf(Locale.US, "Accuracy                 : %.1f%%%n", accuracy);
+            System.out.println("Highest streak           : " + highestPracticeStreak);
             System.out.print("Topics practised         : ");
             List<String> topicNames = new ArrayList<>();
             for (Topic questionTopic : Topic.values()) {
@@ -824,6 +833,8 @@ public class QuizApplication {
             correctCount = 0;
             incorrectCount = 0;
             unansweredCount = 0;
+            currentStreak = 0;
+            highestStreak = 0;
             answerReviews.clear();
             topicPerformance.clear();
             difficultyPerformance.clear();
@@ -862,6 +873,7 @@ public class QuizApplication {
                     System.out.println("   The correct answer was: " 
                         + question.getCorrectOption() + ") " + question.getCorrectOptionText());
                     incorrectCount++;
+                    currentStreak = 0;
                 } else {
                     answerReviews.add(new AnswerReview(question, userChoice, false));
                     boolean isCorrect = question.isCorrect(userChoice);
@@ -872,13 +884,17 @@ public class QuizApplication {
                     if (isCorrect) {
                         System.out.println(">> Correct! Well done.");
                         correctCount++;
+                        currentStreak++;
+                        highestStreak = Math.max(highestStreak, currentStreak);
                     } else {
                         System.out.println(">> Incorrect!");
                         System.out.println("   The correct answer was: " 
                             + question.getCorrectOption() + ") " + question.getCorrectOptionText());
                         incorrectCount++;
+                        currentStreak = 0;
                     }
                 }
+                System.out.println("   Current streak: " + currentStreak);
             }
 
             double percentage = ((double) correctCount / totalQuestions) * 100.0;
@@ -1387,6 +1403,7 @@ public class QuizApplication {
             double accuracy = answeredCount == 0 ? 0.0 : ((double) correctCount / answeredCount) * 100.0;
             System.out.printf("Accuracy         : %.1f%%%n", accuracy);
             System.out.printf("Score Percentage : %.1f%%%n", percentage);
+            System.out.println("Highest Streak   : " + highestStreak);
             System.out.println("-------------------------------------------------");
             System.out.println("Performance      : " + getPerformanceFeedback(percentage));
             System.out.println("=================================================");
