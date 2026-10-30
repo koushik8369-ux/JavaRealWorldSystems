@@ -14,8 +14,10 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.BlockingQueue;
@@ -99,6 +101,14 @@ public class QuizApplication {
             return subDirFile;
         }
         return new File(CSV_FILE_NAME);
+    }
+
+    private static File getBookmarksFile() {
+        File subDirFile = new File("Projects" + File.separator + "QuizApplication", "bookmarked_questions.csv");
+        if (subDirFile.getParentFile() != null && subDirFile.getParentFile().isDirectory()) {
+            return subDirFile;
+        }
+        return new File("bookmarked_questions.csv");
     }
 
     /**
@@ -239,6 +249,8 @@ public class QuizApplication {
         private final String[] options;
         private final char correctOption; // 'A', 'B', 'C', or 'D'
         private final String explanation;
+        private final String[] originalOptions;
+        private final char originalCorrectOption;
 
         public Question(Topic topic, String questionText, String[] options, char correctOption) {
             this(topic, questionText, options, correctOption,
@@ -247,11 +259,18 @@ public class QuizApplication {
 
         public Question(Topic topic, String questionText, String[] options, char correctOption,
                         String explanation) {
+            this(topic, questionText, options, correctOption, explanation, options, correctOption);
+        }
+
+        private Question(Topic topic, String questionText, String[] options, char correctOption,
+                         String explanation, String[] originalOptions, char originalCorrectOption) {
             this.topic = topic;
             this.questionText = questionText;
-            this.options = options;
+            this.options = options.clone();
             this.correctOption = Character.toUpperCase(correctOption);
             this.explanation = explanation;
+            this.originalOptions = originalOptions.clone();
+            this.originalCorrectOption = Character.toUpperCase(originalCorrectOption);
         }
 
         public Topic getTopic() {
@@ -298,7 +317,13 @@ public class QuizApplication {
                     shuffledCorrectOption = (char) ('A' + i);
                 }
             }
-            return new Question(topic, questionText, shuffledOptions, shuffledCorrectOption, explanation);
+            return new Question(topic, questionText, shuffledOptions, shuffledCorrectOption, explanation,
+                originalOptions, originalCorrectOption);
+        }
+
+        private BookmarkedQuestion toBookmark(Difficulty difficulty) {
+            return new BookmarkedQuestion(topic, difficulty, questionText, originalOptions,
+                originalCorrectOption, explanation);
         }
 
         public String getCorrectOptionText() {
@@ -328,6 +353,29 @@ public class QuizApplication {
                 System.out.println("  " + label + ") " + option);
                 label++;
             }
+        }
+    }
+
+    static class BookmarkedQuestion {
+        private final Topic topic;
+        private final Difficulty difficulty;
+        private final String questionText;
+        private final String[] options;
+        private final char correctOption;
+        private final String explanation;
+
+        private BookmarkedQuestion(Topic topic, Difficulty difficulty, String questionText,
+                                   String[] options, char correctOption, String explanation) {
+            this.topic = topic;
+            this.difficulty = difficulty;
+            this.questionText = questionText;
+            this.options = options.clone();
+            this.correctOption = correctOption;
+            this.explanation = explanation;
+        }
+
+        private String getIdentity() {
+            return topic.name() + "\u0000" + questionText;
         }
     }
 
@@ -983,7 +1031,7 @@ public class QuizApplication {
                 System.out.println();
                 question.displayQuestion(i + 1, timeLimitSeconds);
 
-                Character userChoice = promptForTimedOption(timeLimitSeconds);
+                Character userChoice = promptForTimedOption(timeLimitSeconds, question, difficulty);
 
                 if (userChoice == null) {
                     answerReviews.add(new AnswerReview(question, null, true));
@@ -1456,12 +1504,19 @@ public class QuizApplication {
         }
 
         /**
-         * Prompts the user with a strict time limit.
+         * Prompts the user with a strict time limit. M toggles this question's bookmark.
          * Returns the chosen option (A, B, C, or D) or null if the timer expires.
          */
         private Character promptForTimedOption(int timeLimitSeconds) {
+            return promptForTimedOption(timeLimitSeconds, null, null);
+        }
+
+        private Character promptForTimedOption(int timeLimitSeconds, Question question, Difficulty questionDifficulty) {
             long deadline = System.currentTimeMillis() + (timeLimitSeconds * 1000L);
-            System.out.print("Your answer (A, B, C, D): ");
+            if (question != null) {
+                System.out.println("Enter M to bookmark/unbookmark this question; the timer continues.");
+            }
+            System.out.print("Your answer (A, B, C, D" + (question == null ? "" : ", M") + "): ");
 
             while (true) {
                 long remainingMs = deadline - System.currentTimeMillis();
@@ -1483,6 +1538,16 @@ public class QuizApplication {
                 }
 
                 String trimmed = line.trim();
+                if (question != null && trimmed.equalsIgnoreCase("M")) {
+                    toggleBookmark(question, questionDifficulty);
+                    long bookmarkRemainingMs = deadline - System.currentTimeMillis();
+                    if (bookmarkRemainingMs <= 0) {
+                        return null;
+                    }
+                    System.out.print("Your answer (A, B, C, D, M; "
+                        + ((bookmarkRemainingMs + 999) / 1000) + "s remaining): ");
+                    continue;
+                }
                 if (trimmed.length() == 1) {
                     char choice = Character.toUpperCase(trimmed.charAt(0));
                     if (choice >= 'A' && choice <= 'D') {
@@ -1495,8 +1560,11 @@ public class QuizApplication {
                     return null; // Time expired during retry
                 }
                 long afterRemainingSec = (afterRemainingMs + 999) / 1000;
-                System.out.println("Invalid input! Please enter only A, B, C, or D (" + afterRemainingSec + "s remaining).");
-                System.out.print("Your answer (A, B, C, D): ");
+                System.out.println("Invalid input! Please enter only A, B, C, or D"
+                    + (question == null ? "" : ", or M")
+                    + " (" + afterRemainingSec + "s remaining).");
+                System.out.print("Your answer (A, B, C, D" + (question == null ? "" : ", M")
+                    + (question == null ? "" : "; " + afterRemainingSec + "s remaining") + "): ");
             }
         }
 
@@ -1716,6 +1784,186 @@ public class QuizApplication {
 
     private static String normalizeHeader(String header) {
         return header.toLowerCase(Locale.ROOT).replaceAll("[^a-z]", "");
+    }
+
+    private static List<BookmarkedQuestion> loadBookmarks() {
+        File file = getBookmarksFile();
+        if (!file.exists()) {
+            return new ArrayList<>();
+        }
+        if (!file.isFile() || !file.canRead()) {
+            System.err.println("Warning: Unable to read bookmarked questions file.");
+            return null;
+        }
+
+        LinkedHashMap<String, BookmarkedQuestion> bookmarks = new LinkedHashMap<>();
+        try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
+            String header = reader.readLine();
+            if (header == null || !hasValidCsvQuoting(header)) {
+                System.err.println("Warning: Bookmarked questions file has an invalid header.");
+                return null;
+            }
+            List<String> headers = parseCsvLine(header);
+            List<String> expectedHeaders = Arrays.asList(
+                "Topic", "Difficulty", "Question", "Option A", "Option B",
+                "Option C", "Option D", "Correct Option", "Explanation");
+            if (headers.size() != expectedHeaders.size()) {
+                System.err.println("Warning: Bookmarked questions file has an unsupported header.");
+                return null;
+            }
+            for (int i = 0; i < headers.size(); i++) {
+                if (!normalizeHeader(headers.get(i)).equals(normalizeHeader(expectedHeaders.get(i)))) {
+                    System.err.println("Warning: Bookmarked questions file has an unsupported header.");
+                    return null;
+                }
+            }
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.trim().isEmpty() || !hasValidCsvQuoting(line)) {
+                    System.err.println("Warning: Skipping a malformed bookmarked question record.");
+                    continue;
+                }
+                List<String> values = parseCsvLine(line);
+                if (values.size() != 9) {
+                    System.err.println("Warning: Skipping a malformed bookmarked question record.");
+                    continue;
+                }
+                try {
+                    Topic bookmarkTopic = Topic.valueOf(values.get(0));
+                    Difficulty bookmarkDifficulty = Difficulty.valueOf(values.get(1));
+                    String questionText = values.get(2);
+                    String[] options = new String[]{values.get(3), values.get(4), values.get(5), values.get(6)};
+                    String correctText = values.get(7);
+                    if (bookmarkTopic == Topic.ALL || questionText.isEmpty() || correctText.length() != 1
+                            || correctText.charAt(0) < 'A' || correctText.charAt(0) > 'D') {
+                        throw new IllegalArgumentException("Invalid bookmark data");
+                    }
+                    for (String option : options) {
+                        if (option.isEmpty()) {
+                            throw new IllegalArgumentException("Missing answer option");
+                        }
+                    }
+                    BookmarkedQuestion bookmark = new BookmarkedQuestion(
+                        bookmarkTopic, bookmarkDifficulty, questionText, options,
+                        correctText.charAt(0), values.get(8));
+                    bookmarks.putIfAbsent(bookmark.getIdentity(), bookmark);
+                } catch (IllegalArgumentException e) {
+                    System.err.println("Warning: Skipping a malformed bookmarked question record.");
+                }
+            }
+        } catch (IOException | SecurityException e) {
+            System.err.println("Warning: Unable to read bookmarked questions file: " + e.getMessage());
+            return null;
+        }
+        return new ArrayList<>(bookmarks.values());
+    }
+
+    private static boolean saveBookmarks(List<BookmarkedQuestion> bookmarks) {
+        File file = getBookmarksFile();
+        try (BufferedWriter writer = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+            writer.write("Topic,Difficulty,Question,Option A,Option B,Option C,Option D,Correct Option,Explanation");
+            writer.newLine();
+            for (BookmarkedQuestion bookmark : bookmarks) {
+                writer.write(escapeCsvField(bookmark.topic.name()));
+                writer.write(',');
+                writer.write(escapeCsvField(bookmark.difficulty.name()));
+                writer.write(',');
+                writer.write(escapeCsvField(bookmark.questionText));
+                for (String option : bookmark.options) {
+                    writer.write(',');
+                    writer.write(escapeCsvField(option));
+                }
+                writer.write(',');
+                writer.write(bookmark.correctOption);
+                writer.write(',');
+                writer.write(escapeCsvField(bookmark.explanation));
+                writer.newLine();
+            }
+            return true;
+        } catch (IOException | SecurityException e) {
+            System.err.println("Warning: Unable to save bookmarked questions: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private static void toggleBookmark(Question question, Difficulty difficulty) {
+        List<BookmarkedQuestion> bookmarks = loadBookmarks();
+        if (bookmarks == null) {
+            System.out.println("Bookmark was not changed because the bookmark file could not be read.");
+            return;
+        }
+        String identity = question.toBookmark(difficulty).getIdentity();
+        for (int i = 0; i < bookmarks.size(); i++) {
+            if (bookmarks.get(i).getIdentity().equals(identity)) {
+                bookmarks.remove(i);
+                if (saveBookmarks(bookmarks)) {
+                    System.out.println(">> Question removed from bookmarks.");
+                }
+                return;
+            }
+        }
+        bookmarks.add(question.toBookmark(difficulty));
+        if (saveBookmarks(bookmarks)) {
+            System.out.println(">> Question bookmarked.");
+        }
+    }
+
+    private static void displayBookmarks() {
+        List<BookmarkedQuestion> bookmarks = loadBookmarks();
+        if (bookmarks == null) {
+            System.out.println("Bookmarks could not be displayed because the bookmark file is unavailable.");
+            return;
+        }
+        System.out.println();
+        System.out.println("================ BOOKMARKED QUESTIONS ================");
+        if (bookmarks.isEmpty()) {
+            System.out.println("No bookmarked questions found.");
+            System.out.println("=======================================================");
+            return;
+        }
+
+        for (int i = 0; i < bookmarks.size(); i++) {
+            BookmarkedQuestion bookmark = bookmarks.get(i);
+            System.out.println((i + 1) + ") [" + bookmark.topic.getDisplayName() + " | "
+                + bookmark.difficulty.getDisplayName() + "] " + bookmark.questionText);
+            for (int option = 0; option < bookmark.options.length; option++) {
+                System.out.println("   " + (char) ('A' + option) + ") " + bookmark.options[option]);
+            }
+            System.out.println("   Correct answer: " + bookmark.correctOption + ") "
+                + bookmark.options[bookmark.correctOption - 'A']);
+            if (bookmark.explanation != null && !bookmark.explanation.trim().isEmpty()) {
+                System.out.println("   Explanation: " + bookmark.explanation);
+            }
+        }
+        System.out.println("=======================================================");
+        removeBookmarkPrompt(bookmarks);
+    }
+
+    private static void removeBookmarkPrompt(List<BookmarkedQuestion> bookmarks) {
+        while (true) {
+            System.out.print("Enter a bookmark number to remove, or N to return: ");
+            String input = readLine();
+            if (input == null || input.trim().equalsIgnoreCase("N")
+                    || input.trim().equalsIgnoreCase("NO")) {
+                return;
+            }
+            try {
+                int selection = Integer.parseInt(input.trim());
+                if (selection < 1 || selection > bookmarks.size()) {
+                    System.out.println("Invalid selection. Enter a listed number or N.");
+                    continue;
+                }
+                BookmarkedQuestion removed = bookmarks.remove(selection - 1);
+                if (saveBookmarks(bookmarks)) {
+                    System.out.println("Removed bookmark: " + removed.questionText);
+                }
+                return;
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid selection. Enter a listed number or N.");
+            }
+        }
     }
 
     /**
@@ -2130,7 +2378,8 @@ public class QuizApplication {
         System.out.println("5) Instructions");
         System.out.println("6) Settings (Timer: " + defaultTimeLimitSeconds + "s)");
         System.out.println("7) Practice Mode");
-        System.out.println("8) Exit");
+        System.out.println("8) Bookmarked Questions");
+        System.out.println("9) Exit");
         System.out.println("-------------------------------------------");
     }
 
@@ -2145,7 +2394,7 @@ public class QuizApplication {
         boolean running = true;
         while (running) {
             displayMainMenu();
-            System.out.print("Select an option (1-8): ");
+            System.out.print("Select an option (1-9): ");
             String choice = readLine();
             if (choice == null) {
                 break;
@@ -2190,12 +2439,15 @@ public class QuizApplication {
                         .startPractice();
                 }
                 case "8" -> {
+                    displayBookmarks();
+                }
+                case "9" -> {
                     running = false;
                     System.out.println();
                     System.out.println("Thank you for taking the Java Quiz. Keep learning and coding!");
                     System.out.println("Goodbye!");
                 }
-                default -> System.out.println("Invalid selection! Please enter a number between 1 and 8.");
+                default -> System.out.println("Invalid selection! Please enter a number between 1 and 9.");
             }
         }
     }
