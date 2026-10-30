@@ -753,6 +753,7 @@ public class QuizApplication {
             int practiceIncorrectCount = 0;
             int currentPracticeStreak = 0;
             int highestPracticeStreak = 0;
+            List<Question> incorrectQuestions = new ArrayList<>();
             EnumMap<Topic, Integer> practicedTopics = new EnumMap<>(Topic.class);
             for (int i = 0; i < questions.size(); i++) {
                 Question question = questions.get(i);
@@ -776,6 +777,7 @@ public class QuizApplication {
                     System.out.println(">> Incorrect!");
                     practiceIncorrectCount++;
                     currentPracticeStreak = 0;
+                    incorrectQuestions.add(question);
                 }
                 System.out.println("   Current streak: " + currentPracticeStreak);
                 System.out.println("   Correct answer: " + question.getCorrectOption()
@@ -794,7 +796,7 @@ public class QuizApplication {
             System.out.println("Correct answers          : " + practiceCorrectCount);
             System.out.println("Incorrect answers        : " + practiceIncorrectCount);
             System.out.printf(Locale.US, "Accuracy                 : %.1f%%%n", accuracy);
-            System.out.println("Highest streak           : " + highestPracticeStreak);
+            System.out.println("Highest streak (original practice): " + highestPracticeStreak);
             System.out.print("Topics practised         : ");
             List<String> topicNames = new ArrayList<>();
             for (Topic questionTopic : Topic.values()) {
@@ -804,6 +806,123 @@ public class QuizApplication {
             }
             System.out.println(topicNames.isEmpty() ? "None" : String.join(", ", topicNames));
             System.out.println("===================================================");
+
+            if (incorrectQuestions.isEmpty()) {
+                System.out.println("No incorrect questions to retry.");
+                return;
+            }
+            if (promptRetryIncorrectQuestions()) {
+                runPracticeRetryRounds(incorrectQuestions);
+            }
+        }
+
+        private boolean promptRetryIncorrectQuestions() {
+            while (true) {
+                System.out.print("Would you like to retry your incorrect questions? (Y/N): ");
+                String input = readLine();
+                if (input == null) {
+                    return false;
+                }
+                String choice = input.trim();
+                if (choice.equalsIgnoreCase("Y") || choice.equalsIgnoreCase("YES")) {
+                    return true;
+                }
+                if (choice.equalsIgnoreCase("N") || choice.equalsIgnoreCase("NO")) {
+                    return false;
+                }
+                System.out.println("Invalid choice! Please enter 'Y' for Yes or 'N' for No.");
+            }
+        }
+
+        private void runPracticeRetryRounds(List<Question> incorrectQuestions) {
+            List<Question> remainingQuestions = new ArrayList<>(incorrectQuestions);
+            int currentRetryStreak = 0;
+            int highestRetryStreak = 0;
+            int roundNumber = 0;
+
+            while (!remainingQuestions.isEmpty()) {
+                roundNumber++;
+                Collections.shuffle(remainingQuestions);
+                List<Question> retryQuestions = new ArrayList<>();
+                for (Question question : remainingQuestions) {
+                    retryQuestions.add(question.shuffledCopy());
+                }
+                remainingQuestions.clear();
+
+                int retryCorrectCount = 0;
+                int retryIncorrectCount = 0;
+                boolean inputEnded = false;
+                System.out.println();
+                System.out.println("================ RETRY ROUND " + roundNumber + " ================");
+                for (int i = 0; i < retryQuestions.size(); i++) {
+                    Question question = retryQuestions.get(i);
+                    System.out.println();
+                    question.displayQuestion(i + 1);
+                    Character userChoice = promptForPracticeOption();
+                    if (userChoice == null) {
+                        System.out.println("\nInput ended. Finishing the retry session.");
+                        remainingQuestions.addAll(retryQuestions.subList(i, retryQuestions.size()));
+                        inputEnded = true;
+                        break;
+                    }
+
+                    if (question.isCorrect(userChoice)) {
+                        System.out.println(">> Correct!");
+                        retryCorrectCount++;
+                        currentRetryStreak++;
+                        highestRetryStreak = Math.max(highestRetryStreak, currentRetryStreak);
+                    } else {
+                        System.out.println(">> Incorrect!");
+                        retryIncorrectCount++;
+                        currentRetryStreak = 0;
+                        remainingQuestions.add(question);
+                    }
+                    System.out.println("   Current retry streak: " + currentRetryStreak);
+                    System.out.println("   Correct answer: " + question.getCorrectOption()
+                        + ") " + question.getCorrectOptionText());
+                    String explanation = question.getExplanation();
+                    if (explanation != null && !explanation.trim().isEmpty()) {
+                        System.out.println("   Explanation: " + explanation);
+                    }
+                }
+
+                System.out.println();
+                System.out.println("Retry round " + roundNumber + " correct answers  : " + retryCorrectCount);
+                System.out.println("Retry round " + roundNumber + " incorrect answers: " + retryIncorrectCount);
+                System.out.println("Highest retry streak so far           : " + highestRetryStreak);
+                if (remainingQuestions.isEmpty()) {
+                    System.out.println("All incorrect questions were answered correctly.");
+                    break;
+                }
+                if (inputEnded || !promptRetryRemainingQuestions()) {
+                    break;
+                }
+            }
+
+            System.out.println();
+            System.out.println("================ RETRY SUMMARY ===================");
+            System.out.println("Retry rounds completed: " + roundNumber);
+            System.out.println("Questions still incorrect: " + remainingQuestions.size());
+            System.out.println("Highest streak (retry rounds): " + highestRetryStreak);
+            System.out.println("===================================================");
+        }
+
+        private boolean promptRetryRemainingQuestions() {
+            while (true) {
+                System.out.print("Would you like to retry the remaining incorrect questions? (Y/N): ");
+                String input = readLine();
+                if (input == null) {
+                    return false;
+                }
+                String choice = input.trim();
+                if (choice.equalsIgnoreCase("Y") || choice.equalsIgnoreCase("YES")) {
+                    return true;
+                }
+                if (choice.equalsIgnoreCase("N") || choice.equalsIgnoreCase("NO")) {
+                    return false;
+                }
+                System.out.println("Invalid choice! Please enter 'Y' for Yes or 'N' for No.");
+            }
         }
 
         private Character promptForPracticeOption() {
