@@ -34,6 +34,7 @@ import java.util.concurrent.TimeUnit;
  * - Automatic timeout detection marking unanswered questions as incorrect.
  * - Robust input validation and case-insensitive answering (A, B, C, D).
  * - Instant feedback showing whether each answer was correct, incorrect, or timed out.
+ * - Untimed practice mode with immediate feedback and no saved results.
  * - Persistent storage of quiz attempts in a local CSV file (quiz_results.csv).
  * - Leaderboard displaying the top 10 attempts ranked by percentage score.
  * - Safe handling of special characters (commas, quotes) in player names.
@@ -316,13 +317,17 @@ public class QuizApplication {
          * Displays the question, its options, and the clear time limit.
          */
         public void displayQuestion(int questionNumber, int timeLimitSeconds) {
+            displayQuestion(questionNumber);
+            System.out.println("[Time limit: " + timeLimitSeconds + " seconds]");
+        }
+
+        public void displayQuestion(int questionNumber) {
             System.out.println("Question " + questionNumber + " [" + topic.getDisplayName() + "]: " + questionText);
             char label = 'A';
             for (String option : options) {
                 System.out.println("  " + label + ") " + option);
                 label++;
             }
-            System.out.println("[Time limit: " + timeLimitSeconds + " seconds]");
         }
     }
 
@@ -717,6 +722,97 @@ public class QuizApplication {
                 new String[]{"Closeable only", "AutoCloseable", "Serializable", "Disposable"},
                 'B'
             ));
+        }
+
+        /**
+         * Runs an untimed practice session without saving results or updating player records.
+         */
+        public void startPractice() {
+            if (questions.isEmpty()) {
+                System.out.println("No questions are available for " + topic.getDisplayName()
+                    + " at the " + difficulty.getDisplayName()
+                    + " level. Please choose another topic or difficulty.");
+                return;
+            }
+
+            Collections.shuffle(questions);
+            for (int i = 0; i < questions.size(); i++) {
+                questions.set(i, questions.get(i).shuffledCopy());
+            }
+
+            System.out.println("=================================================");
+            System.out.println("                PRACTICE MODE                    ");
+            System.out.println("     Difficulty: " + difficulty.getDisplayName());
+            System.out.println("     Topic     : " + topic.getDisplayName());
+            System.out.println("=================================================");
+
+            int practicedCount = 0;
+            int practiceCorrectCount = 0;
+            int practiceIncorrectCount = 0;
+            EnumMap<Topic, Integer> practicedTopics = new EnumMap<>(Topic.class);
+            for (int i = 0; i < questions.size(); i++) {
+                Question question = questions.get(i);
+                System.out.println();
+                question.displayQuestion(i + 1);
+
+                Character userChoice = promptForPracticeOption();
+                if (userChoice == null) {
+                    System.out.println("\nInput ended. Finishing the practice session.");
+                    break;
+                }
+
+                practicedCount++;
+                practicedTopics.merge(question.getTopic(), 1, Integer::sum);
+                if (question.isCorrect(userChoice)) {
+                    System.out.println(">> Correct!");
+                    practiceCorrectCount++;
+                } else {
+                    System.out.println(">> Incorrect!");
+                    practiceIncorrectCount++;
+                }
+                System.out.println("   Correct answer: " + question.getCorrectOption()
+                    + ") " + question.getCorrectOptionText());
+                String explanation = question.getExplanation();
+                if (explanation != null && !explanation.trim().isEmpty()) {
+                    System.out.println("   Explanation: " + explanation);
+                }
+            }
+
+            double accuracy = practicedCount == 0
+                ? 0.0 : ((double) practiceCorrectCount / practicedCount) * 100.0;
+            System.out.println();
+            System.out.println("================ PRACTICE SUMMARY ================");
+            System.out.println("Total questions practised: " + practicedCount);
+            System.out.println("Correct answers          : " + practiceCorrectCount);
+            System.out.println("Incorrect answers        : " + practiceIncorrectCount);
+            System.out.printf(Locale.US, "Accuracy                 : %.1f%%%n", accuracy);
+            System.out.print("Topics practised         : ");
+            List<String> topicNames = new ArrayList<>();
+            for (Topic questionTopic : Topic.values()) {
+                if (questionTopic != Topic.ALL && practicedTopics.containsKey(questionTopic)) {
+                    topicNames.add(questionTopic.getDisplayName());
+                }
+            }
+            System.out.println(topicNames.isEmpty() ? "None" : String.join(", ", topicNames));
+            System.out.println("===================================================");
+        }
+
+        private Character promptForPracticeOption() {
+            while (true) {
+                System.out.print("Your answer (A, B, C, D): ");
+                String input = readLine();
+                if (input == null) {
+                    return null;
+                }
+                String trimmed = input.trim();
+                if (trimmed.length() == 1) {
+                    char choice = Character.toUpperCase(trimmed.charAt(0));
+                    if (choice >= 'A' && choice <= 'D') {
+                        return choice;
+                    }
+                }
+                System.out.println("Invalid input! Please enter only A, B, C, or D.");
+            }
         }
 
         /**
@@ -1897,7 +1993,8 @@ public class QuizApplication {
         System.out.println("4) Player Statistics");
         System.out.println("5) Instructions");
         System.out.println("6) Settings (Timer: " + defaultTimeLimitSeconds + "s)");
-        System.out.println("7) Exit");
+        System.out.println("7) Practice Mode");
+        System.out.println("8) Exit");
         System.out.println("-------------------------------------------");
     }
 
@@ -1912,7 +2009,7 @@ public class QuizApplication {
         boolean running = true;
         while (running) {
             displayMainMenu();
-            System.out.print("Select an option (1-7): ");
+            System.out.print("Select an option (1-8): ");
             String choice = readLine();
             if (choice == null) {
                 break;
@@ -1948,12 +2045,21 @@ public class QuizApplication {
                 case "5" -> displayWelcomeAndInstructions();
                 case "6" -> configureSettings();
                 case "7" -> {
+                    System.out.println();
+                    Topic selectedTopic = selectTopic();
+                    System.out.println();
+                    Difficulty selectedDifficulty = selectDifficulty();
+                    System.out.println();
+                    new Quiz("Practice", selectedDifficulty, selectedTopic, defaultTimeLimitSeconds)
+                        .startPractice();
+                }
+                case "8" -> {
                     running = false;
                     System.out.println();
                     System.out.println("Thank you for taking the Java Quiz. Keep learning and coding!");
                     System.out.println("Goodbye!");
                 }
-                default -> System.out.println("Invalid selection! Please enter a number between 1 and 7.");
+                default -> System.out.println("Invalid selection! Please enter a number between 1 and 8.");
             }
         }
     }
