@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
  * - Player profile support with custom player names.
  * - Topic selection: Java Fundamentals, OOP, Arrays, Strings, Collections, Exceptions, or All Topics.
  * - Three distinct difficulty levels: Easy, Medium, and Hard.
+ * - Difficulty-based scoring: Easy questions are worth 1 point, Medium 2, and Hard 3.
  * - Configurable question timer (defaulting to 20 seconds).
  * - Automatic timeout detection marking unanswered questions as incorrect.
  * - Robust input validation and case-insensitive answering (A, B, C, D).
@@ -138,18 +139,24 @@ public class QuizApplication {
      * Enum representing the supported quiz difficulty levels.
      */
     enum Difficulty {
-        EASY("Easy"),
-        MEDIUM("Medium"),
-        HARD("Hard");
+        EASY("Easy", 1),
+        MEDIUM("Medium", 2),
+        HARD("Hard", 3);
 
         private final String displayName;
+        private final int points;
 
-        Difficulty(String displayName) {
+        Difficulty(String displayName, int points) {
             this.displayName = displayName;
+            this.points = points;
         }
 
         public String getDisplayName() {
             return displayName;
+        }
+
+        public int getPoints() {
+            return points;
         }
     }
 
@@ -251,19 +258,32 @@ public class QuizApplication {
         private final String explanation;
         private final String[] originalOptions;
         private final char originalCorrectOption;
+        private final Difficulty difficulty;
 
         public Question(Topic topic, String questionText, String[] options, char correctOption) {
             this(topic, questionText, options, correctOption,
-                 buildExplanation(questionText, options, correctOption));
+                 buildExplanation(questionText, options, correctOption), null);
         }
 
         public Question(Topic topic, String questionText, String[] options, char correctOption,
                         String explanation) {
-            this(topic, questionText, options, correctOption, explanation, options, correctOption);
+            this(topic, questionText, options, correctOption, explanation, null);
+        }
+
+        public Question(Topic topic, String questionText, String[] options, char correctOption,
+                        Difficulty difficulty) {
+            this(topic, questionText, options, correctOption,
+                 buildExplanation(questionText, options, correctOption), difficulty);
         }
 
         private Question(Topic topic, String questionText, String[] options, char correctOption,
-                         String explanation, String[] originalOptions, char originalCorrectOption) {
+                         String explanation, Difficulty difficulty) {
+            this(topic, questionText, options, correctOption, explanation, options, correctOption, difficulty);
+        }
+
+        private Question(Topic topic, String questionText, String[] options, char correctOption,
+                         String explanation, String[] originalOptions, char originalCorrectOption,
+                         Difficulty difficulty) {
             this.topic = topic;
             this.questionText = questionText;
             this.options = options.clone();
@@ -271,6 +291,7 @@ public class QuizApplication {
             this.explanation = explanation;
             this.originalOptions = originalOptions.clone();
             this.originalCorrectOption = Character.toUpperCase(originalCorrectOption);
+            this.difficulty = difficulty;
         }
 
         public Topic getTopic() {
@@ -291,6 +312,15 @@ public class QuizApplication {
 
         public String getExplanation() {
             return explanation;
+        }
+
+        public Difficulty getDifficulty() {
+            return difficulty;
+        }
+
+        private Question withDifficulty(Difficulty questionDifficulty) {
+            return new Question(topic, questionText, options, correctOption, explanation,
+                originalOptions, originalCorrectOption, questionDifficulty);
         }
 
         private static String buildExplanation(String questionText, String[] options, char correctOption) {
@@ -318,7 +348,7 @@ public class QuizApplication {
                 }
             }
             return new Question(topic, questionText, shuffledOptions, shuffledCorrectOption, explanation,
-                originalOptions, originalCorrectOption);
+                originalOptions, originalCorrectOption, difficulty);
         }
 
         private BookmarkedQuestion toBookmark(Difficulty difficulty) {
@@ -427,6 +457,8 @@ public class QuizApplication {
         private int correctCount;
         private int incorrectCount;
         private int unansweredCount;
+        private int pointsEarned;
+        private int maxPossiblePoints;
         private int currentStreak;
         private int highestStreak;
 
@@ -467,9 +499,25 @@ public class QuizApplication {
 
             for (Question q : bank) {
                 if (topic == Topic.ALL || q.getTopic() == topic) {
-                    questions.add(q);
+                    questions.add(q.withDifficulty(difficulty));
                 }
             }
+        }
+
+        static int pointsForAnswer(Question question, boolean isCorrect) {
+            return isCorrect ? question.getDifficulty().getPoints() : 0;
+        }
+
+        static int calculateMaximumPoints(List<Question> questions) {
+            int maximumPoints = 0;
+            for (Question question : questions) {
+                maximumPoints += question.getDifficulty().getPoints();
+            }
+            return maximumPoints;
+        }
+
+        static double calculateScorePercentage(int pointsEarned, int maximumPoints) {
+            return maximumPoints == 0 ? 0.0 : ((double) pointsEarned / maximumPoints) * 100.0;
         }
 
         /**
@@ -1000,6 +1048,8 @@ public class QuizApplication {
             correctCount = 0;
             incorrectCount = 0;
             unansweredCount = 0;
+            pointsEarned = 0;
+            maxPossiblePoints = 0;
             currentStreak = 0;
             highestStreak = 0;
             answerReviews.clear();
@@ -1026,12 +1076,13 @@ public class QuizApplication {
             System.out.println("=================================================");
 
             int totalQuestions = questions.size();
+            maxPossiblePoints = calculateMaximumPoints(questions);
             for (int i = 0; i < totalQuestions; i++) {
                 Question question = questions.get(i);
                 System.out.println();
                 question.displayQuestion(i + 1, timeLimitSeconds);
 
-                Character userChoice = promptForTimedOption(timeLimitSeconds, question, difficulty);
+                Character userChoice = promptForTimedOption(timeLimitSeconds, question, question.getDifficulty());
 
                 if (userChoice == null) {
                     answerReviews.add(new AnswerReview(question, null, true));
@@ -1046,7 +1097,7 @@ public class QuizApplication {
                     boolean isCorrect = question.isCorrect(userChoice);
                     topicPerformance.computeIfAbsent(question.getTopic(), key -> new PerformanceStats())
                         .record(isCorrect);
-                    difficultyPerformance.computeIfAbsent(difficulty, key -> new PerformanceStats())
+                    difficultyPerformance.computeIfAbsent(question.getDifficulty(), key -> new PerformanceStats())
                         .record(isCorrect);
                     if (isCorrect) {
                         System.out.println(">> Correct! Well done.");
@@ -1061,11 +1112,16 @@ public class QuizApplication {
                         currentStreak = 0;
                     }
                 }
+                int questionPoints = pointsForAnswer(question,
+                    userChoice != null && question.isCorrect(userChoice));
+                pointsEarned += questionPoints;
+                System.out.println("   Points earned: +" + questionPoints + " (Total: "
+                    + pointsEarned + " / " + maxPossiblePoints + ")");
                 System.out.println("   Current streak: " + currentStreak);
             }
 
-            double percentage = ((double) correctCount / totalQuestions) * 100.0;
-            displayResults(totalQuestions, percentage);
+            double percentage = calculateScorePercentage(pointsEarned, maxPossiblePoints);
+            displayResults(totalQuestions, percentage, pointsEarned, maxPossiblePoints);
             displayAnswerReview();
 
             String timestamp = LocalDateTime.now().format(DATE_FORMATTER);
@@ -1299,8 +1355,7 @@ public class QuizApplication {
             int totalQuestions = answerReviews.size();
             int incorrectAnswers = incorrectCount - unansweredCount;
             int answeredCount = totalQuestions - unansweredCount;
-            double scorePercentage = totalQuestions == 0
-                ? 0.0 : ((double) correctCount / totalQuestions) * 100.0;
+            double scorePercentage = calculateScorePercentage(pointsEarned, maxPossiblePoints);
             double accuracy = answeredCount == 0
                 ? 0.0 : ((double) correctCount / answeredCount) * 100.0;
             StringBuilder report = new StringBuilder();
@@ -1315,7 +1370,8 @@ public class QuizApplication {
             report.append("Correct answers: ").append(correctCount).append('\n');
             report.append("Incorrect answers: ").append(incorrectAnswers).append('\n');
             report.append("Unanswered/timed out: ").append(unansweredCount).append('\n');
-            report.append("Final score: ").append(correctCount).append(" / ").append(totalQuestions).append('\n');
+            report.append("Final score: ").append(pointsEarned).append(" / ")
+                .append(maxPossiblePoints).append(" points\n");
             report.append(String.format(Locale.US, "Score percentage: %.1f%%%n", scorePercentage));
             report.append(String.format(Locale.US, "Accuracy (answered questions): %.1f%%%n", accuracy));
             report.append("Performance: ").append(getPerformanceFeedback(scorePercentage)).append("\n\n");
@@ -1348,14 +1404,14 @@ public class QuizApplication {
         private void appendDifficultyAnalytics(StringBuilder report) {
             report.append("DIFFICULTY-WISE PERFORMANCE (ANSWERED QUESTIONS)\n");
             for (Difficulty questionDifficulty : Difficulty.values()) {
-                if (questionDifficulty != difficulty) {
-                    report.append(questionDifficulty.getDisplayName()).append(": Not attempted\n");
-                    continue;
-                }
                 PerformanceStats stats = difficultyPerformance.get(questionDifficulty);
                 if (stats == null || stats.attempted == 0) {
-                    report.append(questionDifficulty.getDisplayName())
-                        .append(": Attempted 0, Correct 0, Accuracy N/A\n");
+                    if (questionDifficulty == difficulty) {
+                        report.append(questionDifficulty.getDisplayName())
+                            .append(": Attempted 0, Correct 0, Accuracy N/A\n");
+                    } else {
+                        report.append(questionDifficulty.getDisplayName()).append(": Not attempted\n");
+                    }
                 } else {
                     report.append(String.format(Locale.US, "%s: Attempted %d, Correct %d, Accuracy %.1f%%%n",
                         questionDifficulty.getDisplayName(), stats.attempted, stats.correct, stats.getAccuracy()));
@@ -1419,7 +1475,7 @@ public class QuizApplication {
                 report.append("\nQuestion ").append(i + 1).append(": ")
                     .append(question.getQuestionText()).append('\n');
                 report.append("Topic: ").append(question.getTopic().getDisplayName()).append('\n');
-                report.append("Difficulty: ").append(difficulty.getDisplayName()).append('\n');
+                report.append("Difficulty: ").append(question.getDifficulty().getDisplayName()).append('\n');
                 report.append("Options shown:\n");
                 for (int optionIndex = 0; optionIndex < question.getOptions().length; optionIndex++) {
                     report.append("  ").append((char) ('A' + optionIndex)).append(") ")
@@ -1470,7 +1526,7 @@ public class QuizApplication {
                 System.out.println("Correct answer  : " + question.getCorrectOption() + ") "
                     + question.getCorrectOptionText());
                 System.out.println("Topic           : " + question.getTopic().getDisplayName());
-                System.out.println("Difficulty      : " + difficulty.getDisplayName());
+                System.out.println("Difficulty      : " + question.getDifficulty().getDisplayName());
                 System.out.println();
             }
             System.out.println("=========================================================");
@@ -1572,7 +1628,8 @@ public class QuizApplication {
          * Calculates and displays score, percentage, counts, selected difficulty,
          * selected topic, player name, and performance message.
          */
-        private void displayResults(int totalQuestions, double percentage) {
+        private void displayResults(int totalQuestions, double percentage,
+                                    int earnedPoints, int maximumPoints) {
             System.out.println();
             System.out.println("=================================================");
             System.out.println("                 FINAL RESULTS                   ");
@@ -1585,7 +1642,7 @@ public class QuizApplication {
             System.out.println("Correct Answers  : " + correctCount);
             System.out.println("Incorrect Answers: " + (incorrectCount - unansweredCount));
             System.out.println("Unanswered/Timed Out: " + unansweredCount);
-            System.out.printf("Final Score      : %d / %d%n", correctCount, totalQuestions);
+            System.out.printf("Final Score      : %d / %d points%n", earnedPoints, maximumPoints);
             int answeredCount = totalQuestions - unansweredCount;
             double accuracy = answeredCount == 0 ? 0.0 : ((double) correctCount / answeredCount) * 100.0;
             System.out.printf("Accuracy         : %.1f%%%n", accuracy);
@@ -1621,14 +1678,14 @@ public class QuizApplication {
             System.out.println();
             System.out.println("DIFFICULTY-WISE PERFORMANCE (ANSWERED QUESTIONS)");
             for (Difficulty questionDifficulty : Difficulty.values()) {
-                if (questionDifficulty != difficulty) {
-                    System.out.printf("%-10s Not attempted%n", questionDifficulty.getDisplayName());
-                    continue;
-                }
                 PerformanceStats stats = difficultyPerformance.get(questionDifficulty);
                 if (stats == null || stats.attempted == 0) {
-                    System.out.printf("%-10s Attempted: 0, Correct: 0, Accuracy: N/A%n",
-                        questionDifficulty.getDisplayName());
+                    if (questionDifficulty == difficulty) {
+                        System.out.printf("%-10s Attempted: 0, Correct: 0, Accuracy: N/A%n",
+                            questionDifficulty.getDisplayName());
+                    } else {
+                        System.out.printf("%-10s Not attempted%n", questionDifficulty.getDisplayName());
+                    }
                 } else {
                     System.out.printf(Locale.US, "%-10s Attempted: %d, Correct: %d, Accuracy: %.1f%%%n",
                         questionDifficulty.getDisplayName(), stats.attempted, stats.correct, stats.getAccuracy());
