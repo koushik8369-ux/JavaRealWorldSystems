@@ -1063,7 +1063,16 @@ public class QuizApplication {
                 return null;
             }
 
+            System.out.println("Questions available for " + topic.getDisplayName() + " at the "
+                + difficulty.getDisplayName() + " level: " + questions.size());
+            int requestedQuestionCount = promptQuestionCount(questions.size());
+            if (requestedQuestionCount == 0) {
+                System.out.println("\nInput ended. The quiz was not started.");
+                return null;
+            }
+
             Collections.shuffle(questions);
+            questions.subList(requestedQuestionCount, questions.size()).clear();
             for (int i = 0; i < questions.size(); i++) {
                 questions.set(i, questions.get(i).shuffledCopy());
             }
@@ -1129,6 +1138,50 @@ public class QuizApplication {
             return new QuizResult(playerName, difficulty.getDisplayName(),
                                   topic.getDisplayName(), correctCount,
                                   totalQuestions, percentage, timestamp);
+        }
+
+        private int promptQuestionCount(int availableQuestionCount) {
+            while (true) {
+                System.out.print("How many questions would you like to attempt? (1-"
+                    + availableQuestionCount + "): ");
+                String input = readLine();
+                if (input == null) {
+                    return 0;
+                }
+
+                input = input.trim();
+                if (input.isEmpty()) {
+                    System.out.println("Question count cannot be empty. Enter a whole number from 1 to "
+                        + availableQuestionCount + ".");
+                    continue;
+                }
+
+                if (!input.matches("[+-]?\\d+")) {
+                    System.out.println("Invalid input. Please enter a whole number from 1 to "
+                        + availableQuestionCount + ".");
+                    continue;
+                }
+
+                if (input.startsWith("-")) {
+                    System.out.println("Question count must be at least 1.");
+                    continue;
+                }
+
+                try {
+                    long questionCount = Long.parseLong(input);
+                    if (questionCount < 1) {
+                        System.out.println("Question count must be at least 1.");
+                    } else if (questionCount > availableQuestionCount) {
+                        System.out.println("Too many questions. You can choose at most "
+                            + availableQuestionCount + ".");
+                    } else {
+                        return (int) questionCount;
+                    }
+                } catch (NumberFormatException e) {
+                    System.out.println("Too many questions. You can choose at most "
+                        + availableQuestionCount + ".");
+                }
+            }
         }
 
         private void displayPlayerProgress(QuizResult currentResult) {
@@ -2362,15 +2415,16 @@ public class QuizApplication {
         System.out.println("1. Choose a topic: Fundamentals, OOP, Arrays,");
         System.out.println("   Strings, Collections, Exceptions, or All Topics.");
         System.out.println("2. Choose a difficulty level: Easy, Medium, or Hard.");
-        System.out.println("3. Each question has four options: A, B, C, D.");
-        System.out.println("4. Answers are case-insensitive ('a' or 'A').");
-        System.out.println("5. Each question has a time limit (default: " + defaultTimeLimitSeconds + "s,");
+        System.out.println("3. Choose how many available questions to attempt.");
+        System.out.println("4. Each question has four options: A, B, C, D.");
+        System.out.println("5. Answers are case-insensitive ('a' or 'A').");
+        System.out.println("6. Each question has a time limit (default: " + defaultTimeLimitSeconds + "s,");
         System.out.println("   configurable in Settings).");
-        System.out.println("6. If time expires, the question is marked wrong");
+        System.out.println("7. If time expires, the question is marked wrong");
         System.out.println("   and the correct answer is revealed.");
-        System.out.println("7. Invalid inputs will be safely rejected.");
-        System.out.println("8. Immediate feedback is given after each answer.");
-        System.out.println("9. Scores are permanently saved to the Leaderboard!");
+        System.out.println("8. Invalid inputs will be safely rejected.");
+        System.out.println("9. Immediate feedback is given after each answer.");
+        System.out.println("10. Scores are permanently saved to the Leaderboard!");
         System.out.println("=================================================");
         System.out.println();
     }
