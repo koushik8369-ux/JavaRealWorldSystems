@@ -53,6 +53,7 @@ public class QuizApplication {
     // Asynchronous console input queue managed by a single background daemon thread
     private static final BlockingQueue<String> inputQueue = new LinkedBlockingQueue<>();
     private static final String EOF_MARKER = "\u0000__EOF__\u0000";
+    private static volatile boolean consoleInputEnded;
 
     static {
         Thread consoleReader = new Thread(() -> {
@@ -79,9 +80,13 @@ public class QuizApplication {
      * Returns null if the input stream terminates (EOF).
      */
     private static String readLine() {
+        if (consoleInputEnded) {
+            return null;
+        }
         try {
             String line = inputQueue.take();
             if (EOF_MARKER.equals(line)) {
+                consoleInputEnded = true;
                 return null;
             }
             return line;
@@ -518,6 +523,165 @@ public class QuizApplication {
 
         static double calculateScorePercentage(int pointsEarned, int maximumPoints) {
             return maximumPoints == 0 ? 0.0 : ((double) pointsEarned / maximumPoints) * 100.0;
+        }
+
+        /**
+         * Runs an independent challenge against the filtered question bank.
+         */
+        public void startTimedChallenge(int challengeDurationMinutes) {
+            if (challengeDurationMinutes != 1 && challengeDurationMinutes != 2
+                    && challengeDurationMinutes != 5) {
+                System.out.println("Invalid challenge duration. Choose 1, 2, or 5 minutes.");
+                return;
+            }
+            if (questions.isEmpty()) {
+                System.out.println("No questions are available for " + topic.getDisplayName()
+                    + " at the " + difficulty.getDisplayName()
+                    + " level. Please choose another topic or difficulty.");
+                return;
+            }
+
+            runTimedChallenge(challengeDurationMinutes,
+                TimeUnit.MINUTES.toNanos(challengeDurationMinutes));
+        }
+
+        private void runTimedChallenge(int challengeDurationMinutes, long challengeDurationNanos) {
+            List<Question> challengeQuestions = new ArrayList<>(questions);
+            Collections.shuffle(challengeQuestions);
+            for (int i = 0; i < challengeQuestions.size(); i++) {
+                challengeQuestions.set(i, challengeQuestions.get(i).shuffledCopy());
+            }
+
+            long startTime = System.nanoTime();
+            long deadline = startTime + challengeDurationNanos;
+            int questionsAttempted = 0;
+            int correctAnswers = 0;
+            int incorrectAnswers = 0;
+            int unansweredQuestions = 0;
+            int pointsEarned = 0;
+            int maximumPoints = 0;
+            boolean challengeEnded = false;
+
+            System.out.println("=================================================");
+            System.out.println("               TIMED CHALLENGE                   ");
+            System.out.println("     Duration  : " + challengeDurationMinutes + " minute(s)");
+            System.out.println("     Difficulty: " + difficulty.getDisplayName());
+            System.out.println("     Topic     : " + topic.getDisplayName());
+            System.out.println("=================================================");
+
+            while (!challengeEnded && System.nanoTime() < deadline) {
+                Collections.shuffle(challengeQuestions);
+                for (Question bankQuestion : challengeQuestions) {
+                    long remainingNanos = deadline - System.nanoTime();
+                    if (remainingNanos <= 0) {
+                        break;
+                    }
+
+                    Question question = bankQuestion.shuffledCopy();
+                    questionsAttempted++;
+                    maximumPoints += question.getDifficulty().getPoints();
+                    System.out.println();
+                    System.out.println("Time remaining: " + formatChallengeTime(remainingNanos));
+                    question.displayQuestion(questionsAttempted);
+
+                    Character userChoice = promptForChallengeOption(question, deadline);
+                    if (userChoice == null) {
+                        unansweredQuestions++;
+                        challengeEnded = true;
+                        break;
+                    }
+
+                    boolean isCorrect = question.isCorrect(userChoice);
+                    if (isCorrect) {
+                        correctAnswers++;
+                        System.out.println(">> Correct!");
+                    } else {
+                        incorrectAnswers++;
+                        System.out.println(">> Incorrect! The correct answer was: "
+                            + question.getCorrectOption() + ") " + question.getCorrectOptionText());
+                    }
+                    int questionPoints = pointsForAnswer(question, isCorrect);
+                    pointsEarned += questionPoints;
+                    System.out.println("   Points earned: +" + questionPoints
+                        + " (Total: " + pointsEarned + " / " + maximumPoints + ")");
+                }
+            }
+            long timeUsedNanos = Math.min(System.nanoTime() - startTime, challengeDurationNanos);
+            int answeredQuestions = correctAnswers + incorrectAnswers;
+            double accuracy = answeredQuestions == 0
+                ? 0.0 : ((double) correctAnswers / answeredQuestions) * 100.0;
+            System.out.println();
+            System.out.println("================ CHALLENGE SUMMARY ================");
+            System.out.println("Questions attempted       : " + questionsAttempted);
+            System.out.println("Correct answers           : " + correctAnswers);
+            System.out.println("Incorrect answers         : " + incorrectAnswers);
+            System.out.println("Unanswered (time expired) : " + unansweredQuestions);
+            System.out.println("Total points earned       : " + pointsEarned);
+            System.out.println("Maximum possible points   : " + maximumPoints);
+            System.out.printf(Locale.US, "Accuracy                  : %.1f%%%n", accuracy);
+            System.out.println("Total time used           : " + formatChallengeTime(timeUsedNanos));
+            System.out.println("====================================================");
+        }
+
+        private Character promptForChallengeOption(Question question, long deadline) {
+            System.out.println("Enter M to bookmark/unbookmark this question; the challenge timer continues.");
+            System.out.print("Your answer (A, B, C, D, M): ");
+
+            while (true) {
+                long remainingNanos = deadline - System.nanoTime();
+                if (remainingNanos <= 0) {
+                    return null;
+                }
+
+                String line;
+                try {
+                    line = inputQueue.poll(Math.max(1L,
+                        TimeUnit.NANOSECONDS.toMillis(remainingNanos)), TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                }
+
+                if (line == null || EOF_MARKER.equals(line) || System.nanoTime() >= deadline) {
+                    if (EOF_MARKER.equals(line)) {
+                        consoleInputEnded = true;
+                    }
+                    return null;
+                }
+
+                String trimmed = line.trim();
+                if (trimmed.equalsIgnoreCase("M")) {
+                    toggleBookmark(question, question.getDifficulty());
+                    long bookmarkRemainingNanos = deadline - System.nanoTime();
+                    if (bookmarkRemainingNanos <= 0) {
+                        return null;
+                    }
+                    System.out.println("Time remaining: " + formatChallengeTime(bookmarkRemainingNanos));
+                    System.out.print("Your answer (A, B, C, D, M): ");
+                    continue;
+                }
+
+                if (trimmed.length() == 1) {
+                    char choice = Character.toUpperCase(trimmed.charAt(0));
+                    if (choice >= 'A' && choice <= 'D') {
+                        return choice;
+                    }
+                }
+
+                long afterRemainingNanos = deadline - System.nanoTime();
+                if (afterRemainingNanos <= 0) {
+                    return null;
+                }
+                System.out.println("Invalid input! Please enter only A, B, C, or M.");
+                System.out.println("Time remaining: " + formatChallengeTime(afterRemainingNanos));
+                System.out.print("Your answer (A, B, C, D, M): ");
+            }
+        }
+
+        private String formatChallengeTime(long remainingNanos) {
+            long totalSeconds = Math.max(0L, (remainingNanos + 999_999_999L) / 1_000_000_000L);
+            return String.format(Locale.US, "%02d:%02d",
+                totalSeconds / 60, totalSeconds % 60);
         }
 
         /**
@@ -2404,6 +2568,31 @@ public class QuizApplication {
         }
     }
 
+    private static int selectChallengeDuration() {
+        System.out.println("Select Timed Challenge Duration:");
+        System.out.println("  1) 1 minute");
+        System.out.println("  2) 2 minutes");
+        System.out.println("  5) 5 minutes");
+
+        while (true) {
+            System.out.print("Enter your choice (1, 2, or 5): ");
+            String input = readLine();
+            if (input == null) {
+                return 0;
+            }
+            switch (input.trim()) {
+                case "1":
+                    return 1;
+                case "2":
+                    return 2;
+                case "5":
+                    return 5;
+                default:
+                    System.out.println("Invalid duration. Please enter 1, 2, or 5 minutes.");
+            }
+        }
+    }
+
     /**
      * Displays the welcome banner and quiz instructions.
      */
@@ -2491,6 +2680,7 @@ public class QuizApplication {
         System.out.println("7) Practice Mode");
         System.out.println("8) Bookmarked Questions");
         System.out.println("9) Exit");
+        System.out.println("10) Timed Challenge Mode");
         System.out.println("-------------------------------------------");
     }
 
@@ -2505,7 +2695,7 @@ public class QuizApplication {
         boolean running = true;
         while (running) {
             displayMainMenu();
-            System.out.print("Select an option (1-9): ");
+            System.out.print("Select an option (1-10): ");
             String choice = readLine();
             if (choice == null) {
                 break;
@@ -2558,7 +2748,22 @@ public class QuizApplication {
                     System.out.println("Thank you for taking the Java Quiz. Keep learning and coding!");
                     System.out.println("Goodbye!");
                 }
-                default -> System.out.println("Invalid selection! Please enter a number between 1 and 9.");
+                case "10" -> {
+                    System.out.println();
+                    int challengeDuration = selectChallengeDuration();
+                    if (challengeDuration == 0) {
+                        System.out.println("Timed Challenge Mode was not started.");
+                        break;
+                    }
+                    System.out.println();
+                    Topic selectedTopic = selectTopic();
+                    System.out.println();
+                    Difficulty selectedDifficulty = selectDifficulty();
+                    System.out.println();
+                    new Quiz("Challenge", selectedDifficulty, selectedTopic, defaultTimeLimitSeconds)
+                        .startTimedChallenge(challengeDuration);
+                }
+                default -> System.out.println("Invalid selection! Please enter a number between 1 and 10.");
             }
         }
     }
